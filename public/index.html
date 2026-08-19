@@ -77,6 +77,9 @@ function spin(t){ M.innerHTML = `<div class="spin"><div><span class="d"></span><
   <div style="margin-top:14px;font-size:14px">${esc(t)}</div></div>`; }
 
 async function api(path, body, method='POST'){
+  // درخواست دوم روی همان اجرا، فایل وضعیت را هم‌زمان بازنویسی می‌کند.
+  // تا جواب اولی نیامده، کلیک بعدی نادیده گرفته می‌شود.
+  if (busy) return;
   busy = true;
   try{
     const r = await fetch(path, method==='GET'?{}:{method,headers:{'content-type':'application/json'},body:JSON.stringify(body)});
@@ -110,6 +113,7 @@ function start(){
   <button onclick="go()">شروع</button>`;
 }
 function go(){
+  if (busy) return;                    // فرم دیگر در DOM نیست
   let u = $('#u').value.trim(); if(!u) return;
   if(!/^https?:\/\//.test(u)) u = 'https://' + u;
   // هر چه از فرم لازم است، قبل از spin خوانده شود —
@@ -133,6 +137,7 @@ function competitors(){
   <p class="sm">بدون رقبا دو الگو از هفت الگو خاموش می‌مانند — جمله‌ی اول ضعیف‌تر درمی‌آید.</p>`;
 }
 function sendComp(skip){
+  if (busy) return;
   const c = skip ? [] : ['c1','c2','c3'].map(i=>$('#'+i).value.trim()).filter(Boolean);
   spin(c.length ? 'رقبا را می‌خوانم و زمین بازی را می‌سازم…' : 'بازار را درمی‌آورم…');
   api('/api/run/competitors', { url, competitors:c });
@@ -185,6 +190,7 @@ function pick(el){
   el.classList.add('on');
 }
 function sendAns(){
+  if (busy) return;
   const answers={}, assumptions={}, constraints=[];
   (S.questions.questions||[]).forEach((q,i)=>{
     const t=document.querySelector(`.qt[data-q="${i}"]`).value.trim();
@@ -253,6 +259,10 @@ function campaign(){
 }
 async function check(){
   const content = $('#ct').value.trim(); if(!content) return;
+  // این تنها دکمه‌ای است که بعد از کلیک روی صفحه می‌ماند —
+  // بدون این محافظ، هر کلیک یک درخواست تازه می‌سازد.
+  if (busy) return;
+  busy = true;
   $('#cr2').innerHTML = '<div class="sm" style="padding:14px 0">در حال بررسی…</div>';
   try{
     const r = await fetch('/api/check',{method:'POST',headers:{'content-type':'application/json'},
@@ -266,6 +276,7 @@ async function check(){
         c.status==='blocked'?'بسته':c.status==='needsRecheck'?'کهنه':'تأیید تو لازم'}</span> ${esc(c.text)}
         ${c.rewrite?`<div class="sm">پیشنهاد: ${esc(c.rewrite)}</div>`:''}</div>`).join('');
   }catch(e){ $('#cr2').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+  finally{ busy = false; }
 }
 
 function tog(id){ $('#'+id).classList.toggle('on'); }
