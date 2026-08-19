@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>وُهو</title><style>
+:root{--bg:#faf9f7;--card:#fff;--ink:#1a1917;--dim:#6f6b65;--line:#e6e2db;--v:#6d4aff;--vs:#f3f0ff;
+--ok:#15803d;--oks:#eaf6ee;--amb:#a16207;--ambs:#fdf6e3;--red:#b91c1c;--reds:#fdeceb}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Vazirmatn","IRANSans","SF Pro Text","Segoe UI",Tahoma,system-ui,sans-serif;line-height:1.85;font-size:16px}
+.app{max-width:560px;margin:0 auto}
+.st{position:absolute;opacity:0;pointer-events:none}
+header{padding:16px 20px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+.brand{font-weight:700;font-size:15px}
+.dots{display:flex;gap:5px;margin-top:9px}
+.dots i{height:3px;flex:1;background:var(--line);border-radius:9px}
+main{padding:22px 20px 40px}
+.step{display:none}
+#s0:checked ~ main .step:nth-of-type(1){display:block}
+#s1:checked ~ main .step:nth-of-type(2){display:block}
+#s2:checked ~ main .step:nth-of-type(3){display:block}
+#s3:checked ~ main .step:nth-of-type(4){display:block}
+#s4:checked ~ main .step:nth-of-type(5){display:block}
+#s5:checked ~ main .step:nth-of-type(6){display:block}
+#s6:checked ~ main .step:nth-of-type(7){display:block}
+#s0:checked ~ header .dots i:nth-child(-n+1){background:#c9bcff}
+#s0:checked ~ header .dots i:nth-child(1){background:#6d4aff}
+#s1:checked ~ header .dots i:nth-child(-n+2){background:#c9bcff}
+#s1:checked ~ header .dots i:nth-child(2){background:#6d4aff}
+#s2:checked ~ header .dots i:nth-child(-n+3){background:#c9bcff}
+#s2:checked ~ header .dots i:nth-child(3){background:#6d4aff}
+#s3:checked ~ header .dots i:nth-child(-n+4){background:#c9bcff}
+#s3:checked ~ header .dots i:nth-child(4){background:#6d4aff}
+#s4:checked ~ header .dots i:nth-child(-n+5){background:#c9bcff}
+#s4:checked ~ header .dots i:nth-child(5){background:#6d4aff}
+#s5:checked ~ header .dots i:nth-child(-n+6){background:#c9bcff}
+#s5:checked ~ header .dots i:nth-child(6){background:#6d4aff}
+#s6:checked ~ header .dots i:nth-child(-n+7){background:#c9bcff}
+#s6:checked ~ header .dots i:nth-child(7){background:#6d4aff}
+.lbl{font-size:11.5px;color:var(--dim);letter-spacing:.05em;margin-bottom:12px}
+h2{font-size:19px;margin:0 0 10px;line-height:1.6}
+p{margin:0 0 12px}
+.big{font-size:19px;font-weight:600;line-height:2.05;margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px 17px;margin:0 0 11px}
+.card b{display:block;font-size:11px;color:var(--dim);font-weight:600;margin-bottom:3px}
+.card .v{font-size:15px}
+.sm{font-size:13.5px;color:var(--dim);line-height:1.9}
+.tag{display:inline-block;font-size:10.5px;border-radius:6px;padding:2px 8px;font-weight:600}
+.t-f{background:var(--oks);color:var(--ok)} .t-h{background:var(--ambs);color:var(--amb)}
+.btn{display:block;background:var(--v);color:#fff;border-radius:13px;padding:15px;font-weight:600;
+ margin-top:8px;text-align:center;cursor:pointer;user-select:none}
+.btn:active{transform:scale(.985)}
+.btn.g{background:var(--card);color:var(--ink);border:1px solid var(--line);font-weight:500}
+.link{display:block;color:var(--dim);text-decoration:underline;padding:12px 0;font-size:13.5px;cursor:pointer;user-select:none}
+.tgl{position:absolute;opacity:0;pointer-events:none}
+.fold{display:none} .tgl:checked + .link + .fold{display:block}
+.opt{display:block;background:var(--card);border:1px solid var(--line);border-radius:12px;
+ padding:13px 15px;margin-bottom:8px;font-size:14.5px;cursor:pointer;user-select:none}
+.opt input{position:absolute;opacity:0;pointer-events:none}
+.opt:has(input:checked){background:var(--vs);border-color:#d6c8ff;font-weight:600}
+.row{display:flex;gap:8px;margin-top:10px} .m0{margin:0;flex:1;text-align:center}
+.q{margin-bottom:22px} .q h3{font-size:15.5px;margin:0 0 4px;font-weight:600;line-height:1.75}
+.q .why{font-size:12.5px;color:var(--dim);margin-bottom:10px;line-height:1.8}
+.gate{background:var(--reds);border:1px dashed #f0c7c3;border-radius:12px;padding:13px 16px;margin:0 0 14px;font-size:13.5px;color:#8c3b36}
+.bars{font-family:ui-monospace,Menlo,monospace;font-size:11px;direction:ltr;text-align:left;
+ background:#faf9f7;border:1px solid var(--line);border-radius:11px;padding:12px;white-space:pre;overflow-x:auto;margin:8px 0}
+.pc{border-right:3px solid var(--v);padding-right:13px;margin-bottom:16px}
+.pc .n{font-size:11px;color:var(--dim);font-weight:600}
+.pc .a{font-size:14.5px;margin:2px 0 5px}
+.done{text-align:center;padding:24px 0} .done .em{font-size:40px;margin-bottom:14px}
+.done .sm{text-align:right}
+</style></head><body><div class="app">
+<input type="radio" name="st" id="s0" class="st" checked><input type="radio" name="st" id="s1" class="st"><input type="radio" name="st" id="s2" class="st"><input type="radio" name="st" id="s3" class="st"><input type="radio" name="st" id="s4" class="st"><input type="radio" name="st" id="s5" class="st"><input type="radio" name="st" id="s6" class="st">
+<header><div class="brand">وُهو <span style="color:var(--dim);font-weight:400;font-size:12.5px">· hatii_shop</span></div>
+<div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></header>
+<main><section class="step" data-i="0"><div class="lbl">شروع</div><h2>لینک کسب‌وکارت را بده</h2>
+<div class="card"><b>سایت یا پیج</b><div class="v"><span style="direction:ltr;display:inline-block">instagram.com/hatii_shop</span></div></div>
+<div class="card"><b>در یک خط چه می‌فروشی؟ (اختیاری)</b><div class="v">لوازم آرایشی و بهداشتی</div></div>
+<p class="sm">همین. نه هدف، نه مخاطب، نه لحن برند — هرچه خودم بتوانم بفهمم نمی‌پرسم.</p>
+<label class="btn" for="s1">شروع</label></section><section class="step" data-i="1"><div class="lbl">دو دقیقه بعد</div>
+<p class="big">در صفحه‌ی اولتان ارزان‌ترین چیزی که نشان می‌دهید ۲٬۴۴۹٬۰۰۰ تومان است، ولی داخل دسته‌ها دستمال مرطوب ۵۵٬۰۰۰ تومانی دارید.
+راه ارزانِ شروع را دارید؛ فقط جایی که اول دیده می‌شود نگذاشته‌اید.</p>
+<label class="btn" for="s2">خب، حالا چه کار کنم؟</label>
+<input type="checkbox" id="ev" class="tgl"><label class="link" for="ev">از کجا فهمیدی؟</label>
+<div class="fold">
+  <div class="card"><b>شواهد</b><div class="v"></div><div class="sm">در صفحه‌ی اصلی سایت پنج قلم نمایش داده می‌شود: دستگاه فرکننده باد سرد شیگلم ۸٬۵۰۰٬۰۰۰ تومان، ضدآفتاب کلاژن گلو مدی‌کیوب ۳٬۶۹۴٬۰۰۰ تومان، کرم ضدلک نامبوزین شماره ۵ ۳٬۴۸۹٬۰۰۰ تومان، آمپول آبرسان سنتلا اسکین 1004 «از ۳٬۳۱۰٬۰۰۰ به ۲٬۸۹۷٬۰۰۰ تومان» و آمپول جمع‌کننده منافذ سنتلا «از ۳٬۰۴۰٬۰۰۰ به ۲٬۴۴۹٬۰۰۰ تومان» — یعنی کف قیمت صفحه‌ی اول ۲٬۴۴۹٬۰۰۰ تومان است. اقلام ارزان فقط داخل دسته‌ها هستند: «دستمال مرطوب سون کوئین ۲۷ عددی: از ۶۵٬۰۰۰ به ۵۵٬۰۰۰ تومان» در دسته آرایش‌پاک‌کن، «اسپری دوفاز کراتینه Gliss: ۹۵٬۰۰۰ تومان» و «اسپری دوفاز لورآل Total Repair: ۱۶۵٬۰۰۰ تومان» در دسته سرم مو.</div></div>
+  <div class="card"><b>پشت صحنه — هفت الگو</b><div class="v"></div><div class="bars">asset_voice █████████████····· 0.74
+positioning ·················· 0.00
+audience    ·················· 0.00
+proof       ██████████████···· 0.78
+fear        ████████·········· 0.42
+entry_point ███████████████··· 0.85
+operations  ███████████······· 0.60</div><div class="sm">هر شش الگو اجرا شد، یکی نمایش داده شد. دو تا خاموش‌اند چون رقبا هنوز خوانده نشده‌اند.</div></div>
+</div>
+<div class="card"><b>و دو چیز دیگر که دیدم</b><div class="v"></div><div class="sm">· «تضمین اصالت» ادعای اصلی سایت است و در هیچ‌کدام از ۱۰ محتوای اخیر و هیچ صفحه‌ی محصولی یک بار هم درباره‌اش حرفی زده نشده؛ هیچ گواهی، شماره سریال یا راه استعلامی هم روی سایت نبود.<br><br>· ارسال هدیه با پیام اختصاصی، پرداخت در محل، کد رهگیری و ساعت پشتیبانی روی سایت هست، ولی نه در صفحه‌ی اول دیده می‌شوند و نه در هیچ‌کدام از ۱۰ محتوای اخیر گفته شده‌اند.</div></div>
+<p class="sm">10 صفحه · 0 رقیب · 10 پست خوانده شد</p></section><section class="step" data-i="2"><div class="lbl">سه چیز را نمی‌دانم</div>
+<p class="sm">فقط چیزهایی که جوابشان مسیر را عوض می‌کند. «نمی‌دانم» هم جواب معتبری است.</p>
+<div class="q"><h3>1. غیر از سایت، جای دیگری هست که الان با مشتری‌ها در تماس باشی؟ مثلاً اینستاگرام، تلگرام، واتساپ، یا مشتری‌هایی که حضوری می‌شناسی.</h3><div class="why">چرا مهم است: در منابع فقط سایت و غرفه باسلام دیده شد و غرفه هم «غیرفعال» اعلام شده بود؛ هیچ کانال محتوایی پیدا نشد. اگر جایی داری که آدم‌ها تو را می‌بینند، برنامه‌ی یک ماه می‌شود فعال‌کردن همان جا. اگر نداری، برنامه‌ی یک ماه چیز دیگری می‌شود: ساختن اولین نقطه‌ی تماس. این دو مسیر هیچ اشتراکی با هم ندارند.</div><label class="opt"><input type="radio" name="q0"><span>فقط سایت</span></label><label class="opt"><input type="radio" name="q0"><span>اینستاگرام دارم</span></label><label class="opt"><input type="radio" name="q0"><span>تلگرام یا واتساپ دارم</span></label><label class="opt"><input type="radio" name="q0"><span>مشتری‌های حضوری و آشنا</span></label><label class="opt"><input type="radio" name="q0"><span>نمی‌دانم</span></label></div><div class="q"><h3>2. خیلی از قلم‌های سایت «ناموجود» نشان داده می‌شوند. واقعاً ناموجودند، یا هست ولی سایت به‌روز نشده؟</h3><div class="why">چرا مهم است: از بیست‌وچهار قلمی که دیدم، سیزده قلم ناموجود بود و یکی هم با قیمت صفر. اگر واقعاً ناموجودند، برنامه‌ی ماه فقط روی همان چند قلم باقی‌مانده بسته می‌شود. اگر فقط سایت عقب است، اول باید سایت درست شود و آن‌وقت سبد کاملاً متفاوتی برای انتخاب دارم. تا این را ندانم ممکن است یک ماه محتوا برای چیزی بسازم که فروختنی نیست.</div><label class="opt"><input type="radio" name="q1"><span>بیشترشان واقعاً ناموجودند</span></label><label class="opt"><input type="radio" name="q1"><span>موجودند، سایت به‌روز نشده</span></label><label class="opt"><input type="radio" name="q1"><span>بعضی هست، بعضی نه</span></label><label class="opt"><input type="radio" name="q1"><span>نمی‌دانم</span></label></div><div class="q"><h3>3. برای «اصالت کالا» چه چیزی داری که بشود نشان داد؟ مثلاً فاکتور خرید، هولوگرام یا کد روی خود جعبه، یا امکان عکس‌گرفتن از بسته‌بندی اصلی.</h3><div class="why">چرا مهم است: «تضمین اصالت» تنها وعده‌ای است که در منابع تکرار شده، ولی هیچ سند، کد یا سازوکار استعلامی کنارش نبود. اصالت کالا ادعای حساسی است و من بدون شاهد آن را در محتوا تکرار نمی‌کنم. اگر شاهدی داری، ستون اصلی ماه همان می‌شود. اگر نداری، باید کل برنامه را روی چیز دیگری بنا کنم و این جمله را از محتوا بردارم.</div><label class="opt"><input type="radio" name="q2"><span>فاکتور خرید از واردکننده دارم</span></label><label class="opt"><input type="radio" name="q2"><span>روی خود کالا هولوگرام یا کد هست</span></label><label class="opt"><input type="radio" name="q2"><span>می‌توانم از بسته‌بندی و مراحل ارسال عکس بگیرم</span></label><label class="opt"><input type="radio" name="q2"><span>چیزی برای نشان‌دادن ندارم</span></label><label class="opt"><input type="radio" name="q2"><span>نمی‌دانم</span></label></div>
+<div class="lbl" style="margin-top:26px">و سه چیز را حدس زده‌ام</div>
+<p class="sm">فقط بگو درست است یا نه. هیچ سؤال مالی نمی‌پرسم — آن‌ها را حدس می‌زنم.</p>
+<div class="card"><div class="v">فرض کردم قلم ورود ارزان تو دستمال مرطوب سون کوئین با ۵۵٬۰۰۰ تومان است، و بعد از آن میسلار واتر دوفاز گارنیر با ۲۴۴٬۰۰۰ تومان.</div><div class="sm" style="margin-top:4px">مبنا: این‌ها ارزان‌ترین قلم‌هایی هستند که هم قیمت دارند و هم ناموجود اعلام نشده‌اند. قلم‌های ارزان‌تر مثل عطر مو ۷۰٬۰۰۰ و اسپری کراتینه Gliss ۹۵٬۰۰۰ ناموجود بودند.</div><div class="row"><label class="opt m0"><input type="radio" name="a0"><span>درست است</span></label><label class="opt m0"><input type="radio" name="a0"><span>نه</span></label></div></div><div class="card"><div class="v">فرض کردم فروش قلم‌های گران مراقبت پوست کره‌ای بیشتر برایت می‌ارزد تا فروش اسپری‌ها و دستمال مرطوب.</div><div class="sm" style="margin-top:4px">مبنا: فقط از فاصله‌ی قیمت‌ها حدس زده‌ام: ضدآفتاب مدی‌کیوب ۳٬۶۹۴٬۰۰۰ و آمپول سنتلا ۲٬۸۹۷٬۰۰۰ در برابر ۵۵٬۰۰۰ تا ۲۴۴٬۰۰۰. هیچ داده‌ای از اینکه کدام برایت به‌صرفه‌تر است ندیدم.</div><div class="row"><label class="opt m0"><input type="radio" name="a1"><span>درست است</span></label><label class="opt m0"><input type="radio" name="a1"><span>نه</span></label></div></div><div class="card"><div class="v">فرض کردم دستگاه فرکننده باد سرد شیگلم با ۸٬۵۰۰٬۰۰۰ تومان محور برنامه‌ی یک ماه نیست.</div><div class="sm" style="margin-top:4px">مبنا: گران‌ترین قلم سبد است و خرید تک‌باره؛ فروشش به اعتماد از پیش‌ساخته نیاز دارد و تنها عدد اجتماعی دیده‌شده ۳۷ دنبال‌کننده و «فروش: بیش از ۱۰» بود.</div><div class="row"><label class="opt m0"><input type="radio" name="a2"><span>درست است</span></label><label class="opt m0"><input type="radio" name="a2"><span>نه</span></label></div></div>
+<label class="btn" for="s3">ادامه</label></section><section class="step" data-i="3"><div class="lbl">سه راه — و نظر من</div><div class="card"><b>راه 1</b><div class="v" style="font-weight:600">اصالت را نشان بده، نه ادعا کن</div><div class="sm" style="margin-top:6px">به‌جای جمله‌ی «تضمین اصالت»، سند اصالت را نشان بده: عکس فاکتور خرید از واردکننده (بخش‌های حساس پوشانده) کنار باز کردن پلمب همان قلم، روی سه محصول مشخصِ قابل‌فروش، در اینستاگرام و با پاسخ‌دهی در دایرکت. فقط دست و محصول در کادر است، چهره نه.</div><div class="sm" style="margin-top:6px">بهترین وقتی که: این مسیر وقتی بهترین است که دلیل نخریدنِ دنبال‌کننده‌ها شک به اصل‌بودن کالا باشد، نه قیمت.</div></div><div class="card"><b>راه 2</b><div class="v" style="font-weight:600">پله‌ی ورود ارزان را جلوی چشم بگذار</div><div class="sm" style="margin-top:6px">اولین خرید را ارزان و بی‌ریسک کن: دستمال مرطوب ۵۵٬۰۰۰ تومانی و اقلام زیر ۵۰۰ هزار تومان (میسلار واتر دوفاز گارنیر ۲۴۴٬۰۰۰، میسلار واتر سیمپل ۴۲۹٬۰۰۰، میسلار واتر گارنیر ۲۰۰ میلی ۴۷۹٬۰۰۰) را جلو بیاور، هم در اینستاگرام هم در صفحه‌ی اول سایت که الان ارزان‌ترین قلمش ۲٬۴۴۹٬۰۰۰ تومان است.</div><div class="sm" style="margin-top:6px">بهترین وقتی که: این مسیر وقتی بهترین است که مانع، مبلغ اولین خرید و نداشتن تجربه‌ی قبلی خرید از تو باشد.</div></div><div class="card"><b>راه 3</b><div class="v" style="font-weight:600">قفسه‌ی پرسود را قبل از محتوا باز کن</div><div class="sm" style="margin-top:6px">خودت گفتی سود روی آرایشی بیشتر است و سایت عقب افتاده. در داده‌ی موجود، هر شش قلم آرایشی غیرقابل‌استفاده‌اند: دو تا ناموجود، یکی با قیمت ۰ تومان، دو تا با تاریخ انقضای گذشته یا نزدیک (ژاکسی ۲۰۲۴، شیگلم 03/2026). این مسیر یعنی اول موجودی و تاریخ همین‌ها را درست کن، بعد کمپین آرایشی بساز.</div><div class="sm" style="margin-top:6px">بهترین وقتی که: این مسیر وقتی بهترین است که همان پنکک‌ها واقعاً در انبار باشند و فقط سایت به‌روز نشده باشد.</div></div>
+<div class="card" style="border-color:#c5e3cf;background:#f7fcf9"><b>توصیه‌ی من</b><div class="v">اصالت را نشان بده، نه ادعا کن</div><div class="sm" style="margin-top:7px">سه دلیل. یک: دارایی‌اش را همین حالا داری — خودت گفتی «فاکتور خرید از واردکننده دارم. می‌تونم عکس بگیرم»؛ این مسیر منتظر هیچ کار عملیاتی نمی‌ماند، برخلاف مسیر سوم. دو: در همان کانالی اجرا می‌شود که خرید واقعاً آنجا اتفاق می‌افتد — خودت گفتی «بیشتر سفارش‌ها از دایرکت می‌آید نه سایت» — پس به سایتِ عقب‌افتاده وابسته نیست. سه: بزرگ‌ترین غیبتِ ثبت‌شده را هدف می‌گیرد: در هیچ صفحه‌ای هیچ سند، شماره سریال یا کد استعلامی برای ادعای اصالت نبود، و اثبات اجتماعی هم صفر بود. مسیر دوم قیمت را حل می‌کند، ولی روی اقلام کم‌سود؛ این مسیر اعتماد را حل می‌کند، که روی همه‌ی اقلام کار می‌کند. این هنوز یک فرضیه است، نه تصمیم — تا وقتی تأییدش کنی.</div></div>
+<label class="btn" for="s4">برنامه را ببین</label>
+<label class="btn g" for="s4">خودت تصمیم بگیر</label></section><section class="step" data-i="4"><div class="lbl">برنامه‌ی این ماه <span class="tag t-h">آزمایش کوچک</span></div>
+<div class="card"><b>هدف <span class="tag t-h">حدس</span></b><div class="v">این را بسنج، نه اینکه کمپین راه بینداز: آیا نشان‌دادن سند اصالت، سؤال‌های دایرکت را به سفارش تبدیل می‌کند؟ روی سه قلم، در دو هفته، بدون هزینه‌ی تبلیغ.</div></div><div class="card"><b>مخاطب <span class="tag t-h">حدس</span></b><div class="v">همان کسی که الان دنبال‌کننده‌ی صفحه است و تا حالا نخریده: برند خارجی و کره‌ای را می‌شناسد، قیمت دو تا سه میلیونی این اقلام را دیده، و از خریدِ چنین مبلغی از یک صفحه‌ی اینستاگرامی که تا حالا از او نخریده مردد است. نه «همه‌ی ۷۴ هزار نفر».</div></div><div class="card"><b>کشش <span class="tag t-h">حدس</span></b><div class="v">برای ضدآفتابی که ۳٬۶۹۴٬۰۰۰ تومان است، ترسِ «تقلبی باشد» از ترسِ «گران باشد» بزرگ‌تر است. و «تضمین اصالت» بدون سند، دقیقاً همان جمله‌ای است که فروشنده‌ی تقلبی هم می‌نویسد — پس چیزی را حل نمی‌کند.</div></div><div class="card"><b>پیام <span class="tag t-h">حدس</span></b><div class="v">اصل بودنش را ثابت می‌کنم، نه اینکه بگویم.</div></div><div class="card"><b>دلیل باور <span class="tag t-f">واقعیت</span></b><div class="v">فاکتور خرید از واردکننده برای همان قلمی که در کادر است، به‌علاوه‌ی باز کردن پلمب همان بسته در یک ویدیوی بی‌قطع. نه حرف، سند.</div></div><div class="card"><b>اقدام <span class="tag t-f">واقعیت</span></b><div class="v">در دایرکت کلمه‌ی «اصالت» را بفرست تا عکس فاکتور همان محصول برایت برود. بدون رفتن به سایت.</div></div><div class="card"><b>نشانه‌ی موفقیت <span class="tag t-h">حدس</span></b><div class="v">دستی بشمار: چند دایرکت کلمه‌ی «اصالت» را فرستادند، و از میان آن‌ها چند نفر بعدش سراغ قیمت یا سفارش رفتند. آستانه‌ای که پیشنهاد می‌کنم برای «جواب داد»: حداقل ۱۰ پیام و ۳ سفارش در دو هفته.</div></div>
+<div class="card" style="border-color:#c5e3cf;background:#f7fcf9"><b>ساخته می‌شود حول</b><div class="v"></div><div class="sm">· دستمال مرطوب سون کوئین ۲۷ عددی — ۵۵٬۰۰۰ تومان (قلم ورود؛ خودت تأیید کردی)<br>· میسلار واتر دوفاز گارنیر ۱۰۰ میلی‌لیتر — ۲۴۴٬۰۰۰ تومان<br>· میسلار واتر سیمپل Gently Removes — ۴۲۹٬۰۰۰ تومان<br>· میسلار واتر پوست حساس گارنیر ۲۰۰ میلی‌لیتر — ۴۷۹٬۰۰۰ تومان</div></div>
+<div class="gate">به سایت لینک نده. خودت گفتی «سایت عقب افتاده، خیلی‌هاشون موجودن ولی وقت نکردم به‌روز کنم» — یعنی کسی که از اینستاگرام برود سایت، ممکن است محصولی را که در انبار داری «ناموجود» ببیند، و یکی از اقلام هم با قیمت ۰ تومان نمایش داده می‌شود. غرفه‌</div>
+<div class="card"><b>پیش‌بینی من</b><div class="v">جنس سؤال‌های دایرکت عوض می‌شود: به‌جای «اصله؟» و «اورجیناله؟»، بیشتر «موجوده؟»، «چطور سفارش بدم؟» و «رنگ/حجمش چیه؟» می‌آید. و برای همان سه قلمی که فاکتورشان را نشان دادی، دایرکت بیشتری می‌گیری تا بقیه‌ی اقلام. اگر دو هفته بعد هنوز اولین سؤال همه «اصله؟» است، مسیر جواب نداده.</div><div class="sm" style="margin-top:6px">دو هفته بعد همین را می‌پرسم. عدد فروش را پیش‌بینی نمی‌کنم چون به آن دسترسی ندارم.</div></div>
+<input type="checkbox" id="rk" class="tgl"><label class="link" for="rk">خطرناک‌ترین فرض این برنامه چیست؟</label>
+<div class="fold"><div class="card" style="border-color:#f0c7c3;background:#fefaf9"><div class="sm">فرض گرفته‌ام آن ۷۴ هزار فالوور خریدارند و مانعشان شک به اصالت است. ولی خودت گفتی «چند بار قرعه‌کشی گذاشتم و پیج تبلیغ کردم» — یعنی بخش قابل‌توجهی از این عدد ممکن است جمع‌شده‌ی قرعه‌کشی باشد که هیچ‌وقت پول نمی‌دهد، فارغ از اینکه چقدر سند نشان بدهی. اگر این‌طور باشد، کل این کارت می‌ریزد و مسئله دیگر اعتماد نیست، بلکه این است که اصلاً مخاطب اشتباهی جمع شده. تست دو هفته‌ای دقیقاً همین را جدا می‌کند.</div></div></div>
+<div class="gate" style="margin-top:14px"><b>تا اینجا هیچ محتوایی ساخته نشده.</b> تا این برنامه را تأیید نکنی، یک خط هم نمی‌نویسم.</div>
+<label class="btn" for="s5">تأیید می‌کنم</label></section><section class="step" data-i="5"><div class="lbl">کمپین</div><div class="pc"><div class="n">قطعه 1 · ساختن دلیل</div><div class="a">این همان قلمی است که در کادر است؛ فاکتورش را می‌گذارم کنارش و پلمبش را جلوی دوربین باز می‌کنم. حرف نمی‌زنم درباره‌ی اصل بودن، نشانش می‌دهم.</div><div class="sm">محصول: ضدآفتاب کلاژن گلو مدی‌کیوب — ۳٬۶۹۴٬۰۰۰ تومان</div><div class="sm">زمان: روز ۱ تا ۳ از پنجره‌ی ۱۴ روزه. به هیچ مناسبتی گره نخورده: نزدیک‌ترین مناسبت (مهر) ۳۹ روز فاصله دارد، یعنی بیرون از این پ</div></div><div class="pc"><div class="n">قطعه 2 · درخواست اقدام</div><div class="a">همان اثبات روی قلم دوم، و این‌بار در پایان: اگر می‌خواهی فاکتور همین قلم را ببینی، در دایرکت بنویس «اصالت» تا برایت بفرستم.</div><div class="sm">محصول: آمپول آبرسان سنتلا اسکین 1004 — ۲٬۸۹۷٬۰۰۰ تومان</div><div class="sm">زمان: روز ۷ تا ۹ از پنجره‌ی ۱۴ روزه، تا پیش از روز ۱۴ که پیش‌بینی کارت سنجیده می‌شود دست‌کم پنج روز برای شمردن دایرکت‌ها بماند</div></div>
+<div class="card"><b>ثابت می‌ماند</b><div class="v"></div><div class="sm">· کانال: اینستاگرام، و ادامه‌ی گفت‌وگو در دایرکت <br>· قالب: ریلز بی‌قطع با همان کادر ثابت <br>· اقدام: تنها یک اقدام در کل کمپین <br>· پیام: «اصل بودنش را ثابت می‌کنم، نه اینکه بگویم» <br>· زبان: کلمه‌های خود خریدار <br>· لحن: کوتاه و بدون تعارف، بدون اموجی<br>· روش شمردن: دستی </div></div>
+<div class="card" style="border-color:#d6c8ff;background:#f3f0ff"><b>فقط این تغییر می‌کند</b><div class="v">کدام محصول سند اصالتش نشان داده می‌شود (ضدآفتاب کلاژن گلو مدی‌کیوب در قطعه‌ی ۱، آمپول آبرسان سنتلا اسکین 1004 در قطعه‌ی ۲)</div><div class="sm" style="margin-top:6px">می‌خواهیم بفهمیم واکنش به خودِ مکانیزم «نشان‌دادن فاکتور» است یا به یک قلم خاص. اگر هر دو قطعه دایرکت بیاورند، مسئله اعتماد بوده و مکانیزم کار می‌کند؛ اگر فقط یکی بیاورد، حرف درباره‌ی آن محصول بوده نه درباره‌ی اصالت. چون قالب، کادر، اقدام و جمله ثابت‌اند، تفاوت نتیجه فقط به محصول قابل نسبت‌دادن است.</div></div>
+<div class="card"><b>اگر وقت کم آمد</b><div class="v">به ترتیب حذف: قطعه 1</div></div>
+<label class="btn" for="s6">تمام</label></section><section class="step" data-i="6"><div class="done"><div class="em">✓</div><h2>همین بود</h2>
+<p class="sm">شش قدم از لینک تا کمپین. هیچ‌کدام از متن‌هایی که دیدی نوشته‌ی من نبود — همه خروجی واقعی اجرای سرد امروز روی هاتی شاپ‌اند.</p>
+<p class="sm">آنچه ندیدی و پشت صحنه بود: خواندن رقبا، تحلیل محتوای قبلی، شناخت بازار، دروازه‌ی شواهد قبل از انتشار، و مرحله‌ی یادگیری دو هفته بعد.</p>
+<label class="btn g" for="s0" style="margin-top:18px">از اول</label></div></section></main>
+</div></body></html>

@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>وُهو</title>
+<style>
+:root{--bg:#faf9f7;--card:#fff;--ink:#1a1917;--dim:#6f6b65;--line:#e6e2db;--v:#6d4aff;--vs:#f3f0ff;
+--ok:#15803d;--oks:#eaf6ee;--amb:#a16207;--ambs:#fdf6e3;--red:#b91c1c;--reds:#fdeceb}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Vazirmatn","IRANSans","SF Pro Text","Segoe UI",Tahoma,system-ui,sans-serif;line-height:1.9;font-size:16px}
+.app{max-width:540px;margin:0 auto;padding:0 20px 60px}
+header{padding:18px 0 14px;border-bottom:1px solid var(--line);margin-bottom:24px;display:flex;justify-content:space-between;align-items:baseline}
+.brand{font-weight:700;font-size:15px}
+.brand small{color:var(--dim);font-weight:400;font-size:12px}
+h2{font-size:20px;margin:0 0 12px;line-height:1.6}
+p{margin:0 0 14px}
+.sm{font-size:13.5px;color:var(--dim);line-height:1.95}
+.day{display:inline-block;font-size:11.5px;color:var(--v);background:var(--vs);border-radius:20px;padding:3px 12px;margin-bottom:13px;font-weight:600}
+input,textarea{width:100%;font-family:inherit;font-size:16px;background:var(--card);
+ border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:10px;color:var(--ink)}
+input:focus,textarea:focus{outline:none;border-color:var(--v)}
+textarea{min-height:90px;resize:vertical;line-height:1.9}
+button{width:100%;font-family:inherit;font-size:16px;font-weight:600;background:var(--v);color:#fff;
+ border:none;border-radius:13px;padding:15px;cursor:pointer;margin-top:8px}
+button:active{transform:scale(.99)} button:disabled{opacity:.5}
+button.g{background:var(--card);color:var(--ink);border:1px solid var(--line);font-weight:500}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px 17px;margin-bottom:11px}
+.card b{display:block;font-size:11px;color:var(--dim);font-weight:600;margin-bottom:3px}
+.card .v{font-size:15px}
+.big{font-size:19px;font-weight:600;line-height:2.05;margin:0 0 18px}
+.tag{display:inline-block;font-size:10.5px;border-radius:6px;padding:2px 8px;font-weight:600}
+.t-f{background:var(--oks);color:var(--ok)} .t-h{background:var(--ambs);color:var(--amb)}
+.t-w{background:var(--reds);color:var(--red)} .t-n{background:#f0eee9;color:var(--dim)}
+.gate{background:var(--reds);border:1px dashed #f0c7c3;border-radius:12px;padding:13px 16px;margin-bottom:14px;font-size:13.5px;color:#8c3b36}
+.good{background:var(--oks);border:1px solid #c5e3cf;border-radius:12px;padding:13px 16px;margin-bottom:14px;font-size:13.5px;color:var(--ok)}
+.q{margin-bottom:20px}
+.q h3{font-size:15.5px;margin:0 0 4px;font-weight:600;line-height:1.75}
+.q .why{font-size:12.5px;color:var(--dim);margin-bottom:9px;line-height:1.85}
+.opts{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.chip{font-size:13.5px;background:var(--card);border:1px solid var(--line);border-radius:20px;
+ padding:8px 14px;cursor:pointer;user-select:none}
+.chip.on{background:var(--vs);border-color:#d6c8ff;font-weight:600;color:#5b3fd6}
+.row{display:flex;gap:8px} .row .chip{flex:1;text-align:center}
+.more{color:var(--v);font-size:13.5px;text-align:center;padding:11px;border:1px solid #ded3ff;
+ border-radius:12px;background:var(--vs);cursor:pointer;user-select:none;margin:14px 0 0}
+.fold{display:none;padding-top:8px} .fold.on{display:block}
+.bars{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;direction:ltr;text-align:left;
+ background:var(--card);border:1px solid var(--line);border-radius:11px;padding:11px;white-space:pre;overflow-x:auto}
+.pc{border-right:3px solid var(--v);padding-right:13px;margin-bottom:15px}
+.pc .n{font-size:11px;color:var(--dim);font-weight:600}
+.pc .a{font-size:14.5px;margin:2px 0 5px}
+.spin{text-align:center;padding:50px 0;color:var(--dim)}
+.spin .d{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--v);margin:0 3px;animation:b 1.2s infinite}
+.spin .d:nth-child(2){animation-delay:.15s} .spin .d:nth-child(3){animation-delay:.3s}
+@keyframes b{0%,60%,100%{opacity:.25;transform:translateY(0)}30%{opacity:1;transform:translateY(-5px)}}
+.err{background:var(--reds);border-radius:12px;padding:14px 16px;color:#8c3b36;font-size:14px;margin-bottom:14px}
+.cl{font-size:13.5px;padding:9px 0;border-bottom:1px solid #f2efea;line-height:1.9}
+.cl:last-child{border:none}
+.hide{display:none}
+</style></head><body>
+<div class="app">
+<header><div class="brand">وُهو <small id="who"></small></div>
+<div class="sm" id="stg"></div></header>
+<main id="m"></main>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const M = $('#m');
+let S = {}, url = '', busy = false;
+
+const esc = s => String(s??'').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+const FA = {goal:'هدف',audience:'مخاطب',tension:'کشش',message:'پیام',
+  reasonToBelieve:'دلیل باور',action:'اقدام',successSignal:'نشانه‌ی موفقیت'};
+const PUR = {attention:'جلب توجه',case:'ساختن دلیل',objection:'برداشتن مانع',ask:'درخواست اقدام'};
+
+function spin(t){ M.innerHTML = `<div class="spin"><div><span class="d"></span><span class="d"></span><span class="d"></span></div>
+  <div style="margin-top:14px;font-size:14px">${esc(t)}</div></div>`; }
+
+async function api(path, body, method='POST'){
+  busy = true;
+  try{
+    const r = await fetch(path, method==='GET'?{}:{method,headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    S = j; url = j.url || url; render();
+  }catch(e){
+    M.innerHTML = `<div class="err">خطا: ${esc(e.message)}</div><button class="g" onclick="render()">برگرد</button>`;
+  }finally{ busy = false; }
+}
+
+function render(){
+  $('#who').textContent = url ? '· ' + url.replace(/^https?:\/\//,'') : '';
+  $('#stg').textContent = S.stages ? S.stages.length + ' مرحله' : '';
+
+  if (!url && !S.needs) return start();
+  if (S.state === 'low_confidence') return lowConf();
+  if (S.needs === 'competitors') return competitors();
+  if (S.needs === 'answers')     return questions();
+  if (S.needs === 'approval')    return strategy();
+  if (S.state === 'done')        return campaign();
+  return start();
+}
+
+function start(){
+  M.innerHTML = `<div class="day">شروع</div>
+  <h2>لینک کسب‌وکارت را بده</h2>
+  <input id="u" placeholder="example.com یا instagram.com/name" dir="ltr" style="text-align:left">
+  <textarea id="n" placeholder="در یک خط چه می‌فروشی؟ (اختیاری)"></textarea>
+  <p class="sm">همین. نه هدف، نه مخاطب، نه لحن برند — هرچه خودم بتوانم بفهمم نمی‌پرسم.</p>
+  <button onclick="go()">شروع</button>`;
+}
+function go(){
+  let u = $('#u').value.trim(); if(!u) return;
+  if(!/^https?:\/\//.test(u)) u = 'https://' + u;
+  url = u; spin('صفحه را می‌خوانم و کسب‌وکار را می‌فهمم…');
+  api('/api/run', { url:u, note:$('#n').value.trim() });
+}
+
+function competitors(){
+  const pg = S.page && !S.page.ok
+    ? `<div class="gate">صفحه خوانده نشد: ${esc(S.page.error)} — با همان توضیح تو جلو می‌روم.</div>` : '';
+  M.innerHTML = `${pg}<div class="day">قدم ۲</div>
+  <h2>سه رقیبت را اسم ببر</h2>
+  <p class="sm">کسانی که مشتری بینتان مقایسه می‌کند. این تنها سؤالی است که خودم نمی‌توانم جوابش را پیدا کنم.</p>
+  <input id="c1" placeholder="آدرس رقیب اول" dir="ltr" style="text-align:left">
+  <input id="c2" placeholder="رقیب دوم (اختیاری)" dir="ltr" style="text-align:left">
+  <input id="c3" placeholder="رقیب سوم (اختیاری)" dir="ltr" style="text-align:left">
+  <button onclick="sendComp()">ادامه</button>
+  <button class="g" onclick="sendComp(true)">رقیبی ندارم، رد شو</button>
+  <p class="sm">بدون رقبا دو الگو از هفت الگو خاموش می‌مانند — جمله‌ی اول ضعیف‌تر درمی‌آید.</p>`;
+}
+function sendComp(skip){
+  const c = skip ? [] : ['c1','c2','c3'].map(i=>$('#'+i).value.trim()).filter(Boolean);
+  spin(c.length ? 'رقبا را می‌خوانم و زمین بازی را می‌سازم…' : 'بازار را درمی‌آورم…');
+  api('/api/run/competitors', { url, competitors:c });
+}
+
+function lowConf(){
+  M.innerHTML = `<div class="day">صادقانه</div>
+  <h2>هنوز به اندازه‌ی کافی نمی‌شناسمت</h2>
+  <div class="gate">${esc(S.insight?.fallback || 'اطمینانم از آستانه کمتر است، پس جمله‌ای نمی‌سازم.')}</div>
+  <p class="sm">اطمینان: ${S.insight?.confident} — آستانه‌ی نمایش ۰٫۶ است.
+  جمله‌ی کلیشه‌ای بدتر از نبودن جمله است.</p>
+  <button class="g" onclick="reset()">از اول با ورودی بیشتر</button>`;
+}
+
+function questions(){
+  const I = S.insight, Q = S.questions;
+  const bars = (I.candidates||[]).map(c=>c.p.padEnd(12)+'█'.repeat(Math.round(c.s*16)).padEnd(16,'·')+' '+c.s.toFixed(2)).join('\n');
+  M.innerHTML = `<div class="day">دو دقیقه بعد</div>
+  <p class="big">${esc(I.sentence)}</p>
+  <div class="card"><b>و ${(I.supporting||[]).length} چیز دیگر که دیدم</b>
+    <div class="sm">${(I.supporting||[]).map(s=>'· '+esc(s.finding)).join('<br><br>')}</div></div>
+  <p class="sm">${I.scope?.pagesRead??0} صفحه · ${I.scope?.competitorsRead??0} رقیب · ${I.scope?.postsRead??0} پست خوانده شد</p>
+  <div class="more" onclick="tog('ev')">از کجا فهمیدی؟</div>
+  <div class="fold" id="ev">
+    <div class="card"><b>شواهد</b><div class="sm">${esc(I.evidence)}</div></div>
+    <div class="card"><b>هفت الگو</b><div class="bars">${esc(bars)}</div></div>
+    ${S.market?.vocab?.length?`<div class="card"><b>زبان خریدار</b><div class="sm">${S.market.vocab.map(v=>`می‌گویند «${esc(v.theySay)}» — نه «${esc(v.notThis)}»`).join('<br>')}</div></div>`:''}
+  </div>
+  <hr style="border:none;border-top:1px solid var(--line);margin:26px 0">
+  <div class="day">${(Q.questions||[]).length} چیز را نمی‌دانم</div>
+  <div id="qs">${(Q.questions||[]).map((q,i)=>`<div class="q"><h3>${i+1}. ${esc(q.question)}</h3>
+    <div class="why">چرا مهم است: ${esc(q.whyItMatters)}</div>
+    <div class="opts">${(q.options||['نمی‌دانم']).map(o=>`<span class="chip" data-q="${i}" onclick="pick(this)">${esc(o)}</span>`).join('')}</div>
+    <input class="qt" data-q="${i}" placeholder="یا خودت بنویس"></div>`).join('')}</div>
+  ${(Q.assumptions||[]).length?`<div class="day">و ${Q.assumptions.length} چیز را حدس زده‌ام</div>
+  <p class="sm">فقط بگو درست است یا نه. سؤال مالی نمی‌پرسم — حدس می‌زنم.</p>
+  ${Q.assumptions.map((a,i)=>`<div class="card"><div class="v">${esc(a.statement)}</div>
+    <div class="row" style="margin-top:10px">
+    <span class="chip" data-a="${i}" onclick="pick(this)">درست است</span>
+    <span class="chip" data-a="${i}" onclick="pick(this)">نه</span></div>
+    <input class="at" data-a="${i}" placeholder="اگر نه، درستش چیست؟" style="margin-top:8px"></div>`).join('')}`:''}
+  <div class="card"><b>چیزی هست که نمی‌خواهی درباره‌اش حرف بزنم؟</b>
+    <input id="cw" placeholder="مثلاً: چهره‌ام را نشان ندهم">
+    <input id="cr" placeholder="چرا؟ دلیلش را نگه می‌دارم"></div>
+  <button onclick="sendAns()">ادامه</button>`;
+}
+function pick(el){
+  const k = el.dataset.q!==undefined ? 'q' : 'a';
+  document.querySelectorAll(`.chip[data-${k}="${el.dataset[k]}"]`).forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+}
+function sendAns(){
+  const answers={}, assumptions={}, constraints=[];
+  (S.questions.questions||[]).forEach((q,i)=>{
+    const t=document.querySelector(`.qt[data-q="${i}"]`).value.trim();
+    const c=document.querySelector(`.chip[data-q="${i}"].on`);
+    answers['q'+(i+1)] = t || (c?c.textContent:'نمی‌دانم');
+  });
+  (S.questions.assumptions||[]).forEach((a,i)=>{
+    const c=document.querySelector(`.chip[data-a="${i}"].on`);
+    const t=document.querySelector(`.at[data-a="${i}"]`).value.trim();
+    assumptions[a.statement] = c && c.textContent==='درست است' ? 'درست' : (t||'نه');
+  });
+  const w=$('#cw').value.trim();
+  if(w) constraints.push({what:w,reason:$('#cr').value.trim()||'نگفته',kind:'concern_based',
+    setAt:new Date().toISOString().slice(0,10),revisitWhen:['اگر کاربر خودش دوباره مطرح کند']});
+  spin('برنامه را می‌سازم…');
+  api('/api/run/answers',{url,answers,assumptions,constraints});
+}
+
+function strategy(){
+  const c = S.strategy;
+  M.innerHTML = `<div class="day">سه راه — و نظر من</div>
+  ${(c.options||[]).map((o,i)=>`<div class="card"><b>راه ${i+1}${o.kind==='step_back'?' · بدون محتوا':''}</b>
+    <div class="v" style="font-weight:600">${esc(o.title)}</div>
+    <div class="sm" style="margin-top:6px">${esc(o.summary)}</div></div>`).join('')}
+  <div class="card" style="border-color:#c5e3cf;background:#f7fcf9"><b>توصیه‌ی من</b>
+    <div class="v" style="font-weight:700">${esc(c.recommended?.title)}</div>
+    <div class="sm" style="margin-top:7px">${esc(c.recommended?.why)}</div></div>
+  <hr style="border:none;border-top:1px solid var(--line);margin:24px 0">
+  <div class="day">برنامه ${c.mode==='small_test'?'· آزمایش کوچک':''}</div>
+  ${Object.entries(c.cells||{}).map(([k,v])=>`<div class="card"><b>${FA[k]||k}
+    <span class="tag ${v.origin==='fact'?'t-f':'t-h'}">${v.origin==='fact'?'واقعیت':'حدس'}</span></b>
+    <div class="v">${esc(v.value)}</div></div>`).join('')}
+  ${c.reachCaveat?`<div class="gate">${esc(c.reachCaveat)}</div>`:''}
+  <div class="card"><b>پیش‌بینی من</b><div class="v">${esc(c.prediction?.observable)}</div>
+    <div class="sm" style="margin-top:6px">${c.prediction?.checkAfterDays??14} روز بعد همین را می‌پرسم.</div></div>
+  <div class="more" onclick="tog('rk')">خطرناک‌ترین فرض این برنامه چیست؟</div>
+  <div class="fold" id="rk"><div class="card" style="border-color:#f0c7c3;background:#fefaf9">
+    <div class="sm">${esc(c.riskiestAssumption)}</div></div></div>
+  <div class="gate" style="margin-top:16px"><b>تا اینجا هیچ محتوایی ساخته نشده.</b>
+    تا این برنامه را تأیید نکنی، یک خط هم نمی‌نویسم.</div>
+  <button onclick="approve()">تأیید می‌کنم</button>`;
+}
+function approve(){ spin('کمپین را طراحی می‌کنم…'); api('/api/run/approve',{url}); }
+
+function campaign(){
+  const c = S.campaign || {};
+  M.innerHTML = `<div class="day">کمپین</div>
+  <h2>${(c.pieces||[]).length} قطعه</h2>
+  ${(c.pieces||[]).map(p=>`<div class="pc"><div class="n">قطعه ${p.n} · ${PUR[p.purpose]||p.purpose}</div>
+    <div class="a">${esc(p.angle)}</div>
+    ${p.product?`<div class="sm">محصول: ${esc(p.product)}</div>`:''}
+    ${p.timing?`<div class="sm">زمان: ${esc(String(p.timing).slice(0,120))}</div>`:''}</div>`).join('')}
+  <div class="card"><b>ثابت می‌ماند</b><div class="sm">${(c.heldConstant||[]).map(h=>'· '+esc(String(h).split('—')[0])).join('<br>')}</div></div>
+  <div class="card" style="border-color:#d6c8ff;background:var(--vs)"><b>فقط این تغییر می‌کند</b>
+    <div class="v">${esc(c.varies?.what)}</div>
+    <div class="sm" style="margin-top:6px">${esc(c.varies?.why)}</div></div>
+  ${c.capacityCheck?`<p class="sm">ظرفیت: ${c.capacityCheck.statedTotal} قطعه اگر حرفت درست باشد → ${c.capacityCheck.realisticTotal} واقع‌بینانه</p>`:''}
+  <hr style="border:none;border-top:1px solid var(--line);margin:26px 0">
+  <div class="day">قبل از انتشار</div>
+  <h2>متن را اینجا بگذار تا چک کنم</h2>
+  <p class="sm">هر ادعایی که پشتش چیزی نباشد را می‌گیرم. آخرین ایست.</p>
+  <textarea id="ct" placeholder="کپشنی که می‌خواهی منتشر کنی"></textarea>
+  <button onclick="check()">بررسی کن</button>
+  <div id="cr2"></div>
+  <button class="g" onclick="reset()" style="margin-top:24px">کسب‌وکار جدید</button>`;
+}
+async function check(){
+  const content = $('#ct').value.trim(); if(!content) return;
+  $('#cr2').innerHTML = '<div class="sm" style="padding:14px 0">در حال بررسی…</div>';
+  try{
+    const r = await fetch('/api/check',{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({url,content})});
+    const j = await r.json();
+    const bad = (j.claims||[]).filter(c=>c.status!=='ok'&&c.status!=='n/a');
+    $('#cr2').innerHTML = (j.gate?.pass
+      ? '<div class="good">✓ همه‌ی ادعاها پشتوانه دارند. قابل انتشار است.</div>'
+      : `<div class="gate">${bad.length} مورد نیاز به اصلاح دارد.</div>`) +
+      bad.map(c=>`<div class="cl"><span class="tag ${c.status==='blocked'?'t-w':'t-h'}">${
+        c.status==='blocked'?'بسته':c.status==='needsRecheck'?'کهنه':'تأیید تو لازم'}</span> ${esc(c.text)}
+        ${c.rewrite?`<div class="sm">پیشنهاد: ${esc(c.rewrite)}</div>`:''}</div>`).join('');
+  }catch(e){ $('#cr2').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+
+function tog(id){ $('#'+id).classList.toggle('on'); }
+function reset(){ S={}; url=''; render(); }
+render();
+</script></body></html>

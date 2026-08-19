@@ -1,0 +1,111 @@
+{
+  "profiles": [
+    {
+      "name": "Complete Physio",
+      "claim": "«مورد اعتمادترین شرکت فیزیوتراپی لندن» که مراقبت «در تراز جهانی» با خدمات مشتری استثنایی می‌دهد. ادعا روی اعتماد و مقیاس است، نه روی یک تخصص خاص. عین عبارت: \"London's most trusted physiotherapy company\" delivering \"world-class physiotherapy care with exceptional customer service.\"",
+      "proof": "عدد انبوه و اعتبار نهادی: امتیاز ۴.۹ از ۵ در Trustpilot با بیش از ۲۱۴۵ نظر پنج‌ستاره؛ «Accredited by all major health insurance companies, including AXA and BUPA, for over 15 years»؛ ۶ کلینیک لندن و ۵۵ نفر تیم؛ ثبت در HCPC و درمانگران Chartered؛ یک نقل‌قول بیمار درباره‌ی مشکل مزمن مچ پا.",
+      "pricesOn": "روی اعتماد و مقیاس، نه ارزانی و نه سرعت. قیمت در صفحه‌ی اصلی نمایش داده نمی‌شود ولی یک صفحه‌ی قیمت جدا در منو وجود دارد: «Pricing: not displayed on homepage, separate pricing page in navigation.»",
+      "speaksTo": "حرفه‌ای‌های شاغل لندن با آسیب ورزشی یا درد کمر و مفصل که بیمه دارند؛ لحن به دونده و ورزشکار کراس‌فیت و ریکاوری ورزشی هم اشاره می‌کند.",
+      "neverMentions": "مقایسه‌ی هزینه با رقبا، نرخ مشخص موفقیت یا بهبود، طول معمول دوره‌ی درمان و نتیجه‌ی آن، زمان انتظار برای نوبت، و مدرک و صلاحیت تک‌تک درمانگرها فراتر از عنوان شغلی. عین عبارت: \"Never mentions: cost comparisons to competitors, specific success or recovery rates, typical treatment duration or outcomes, wait times for appointments, qualifications of individual practitioners beyond title.\""
+    },
+    {
+      "name": "LPAW Clinic",
+      "claim": "«Bounce Back Better» — کلینیک تخصصی با درمان «زندگی‌عوض‌کن»، تجهیزات نادر و درمانگران خبره، فعال از ۲۰۱۵. ادعا روی تخصصی‌بودن و نادر بودن امکانات است. عین عبارت: \"Bounce Back Better\" — specialist physiotherapy clinic offering \"life-changing treatment\" with rare facilities and expert practitioners since 2015.",
+      "proof": "ترکیب عدد و آدم و تجهیزات: امتیاز ۴.۹ از ۵ بر پایه‌ی ۱۷۵ نظر گوگل؛ تیم ۲۰ متخصص که بسیاری مدرک تکمیلی از UCL و King's College London دارند؛ درمانگر ارشد با «25+ years of NHS and private experience»؛ ثبت در HPC و Chartered Society of Physiotherapy؛ «6500+ Patients»؛ امکانات نام‌برده مثل «36°C hydrotherapy pool» و «Med-X spinal gym»؛ دو نقل‌قول بیمار، یکی با بازه‌ی زمانی بهبود: «I was unable to walk...recovered after 3/4 months».",
+      "pricesOn": "روی اختصاصی‌بودن و تجهیزاتی که جای دیگر نیست — نه ارزانی. قیمت را نمی‌گوید و به‌جایش پوشش بیمه را برجسته می‌کند با لوگوی BUPA، AXA Health، WPA و Aviva؛ یعنی مخاطب هدفش بیمه‌شده است نه خودپرداز.",
+      "speaksTo": "ساکنان مرفه شرق لندن، علاقه‌مندان ورزش، بیماران دوره‌ی پس از عمل، و افراد دارای بیمه‌ی خصوصی.",
+      "neverMentions": "دسترسی از طریق NHS، شفافیت قیمت برای بیمار خودپرداز، و نرخ موفقیت درمان یا داده‌ی نتیجه‌ی بالینی. عین عبارت: \"Never mentions: NHS availability, pricing transparency for self-pay patients, treatment success rates or clinical outcomes data.\""
+    }
+  ],
+  "playingField": {
+    "everyoneSays": [
+      "امتیاز ۴.۹ از ۵ — هر دو رقیب دقیقاً همین عدد را می‌زنند، یکی با ۲۱۴۵ نظر Trustpilot و دیگری با ۱۷۵ نظر گوگل. خودِ عدد ۴.۹ دیگر تمایز نیست؛ فقط تعداد نظر فرق می‌کند.",
+      "ثبت رسمی در نهاد حرفه‌ای: Complete Physio می‌گوید «Registered with HCPC»، LPAW می‌گوید «Registered with HPC and Chartered Society of Physiotherapy». این حرف عادی بازار است، نه مزیت.",
+      "پوشش یا اعتبار نزد بیمه‌های بزرگ (AXA و BUPA در هر دو). ما هم هفت شرکت بیمه داریم — این ستون کاملاً اشباع است.",
+      "ادعای کیفیت با صفت بزرگ و بدون عدد: «world-class» و «most trusted» در یکی، «life-changing» در دیگری. وعده‌ی خودمان «Olympic level» هم دقیقاً از همین جنس است.",
+      "نقل‌قول بیمار روی صفحه — هر دو رقیب دست‌کم یک نقل‌قول واقعی دارند.",
+      "قیمت روی صفحه‌ی اصلی نیست — در هیچ‌کدام از دو رقیب.",
+      "سابقه‌ی زمانی به‌صورت عدد: «for over 15 years» در یکی و «since 2015» در دیگری."
+    ],
+    "someSay": [
+      "مقیاس و شبکه‌ی چندشعبه‌ای — فقط Complete Physio: ۶ کلینیک لندن و ۵۵ نفر تیم.",
+      "صفحه‌ی قیمت جدا در منو — فقط Complete Physio.",
+      "ورزش‌های نام‌برده به‌عنوان زمینه‌ی مخاطب (دویدن، کراس‌فیت، ریکاوری ورزشی) — فقط Complete Physio.",
+      "تجهیزات نادر به‌عنوان دلیل انتخاب — فقط LPAW: استخر هیدروتراپی ۳۶ درجه، Med-X spinal gym، UrgentPC PTNS، Excio Biofeedback.",
+      "مدرک دانشگاهی و مسیر تحصیلی افراد — فقط LPAW: مدارک تکمیلی UCL و King's College London و «25+ years of NHS and private experience» برای درمانگر ارشد. Complete Physio صریحاً همین را نمی‌گوید.",
+      "تعداد کل بیماران درمان‌شده — فقط LPAW: «6500+ Patients».",
+      "مراقبت پس از عمل به‌عنوان مخاطب مشخص — فقط LPAW.",
+      "شمردن اتاق‌ها و فضای فیزیکی («4 treatment rooms, 2 changing rooms with showers, a large rehab gym») — فقط LPAW."
+    ],
+    "nobodySays": [
+      "نرخ موفقیت درمان یا داده‌ی نتیجه‌ی بالینی — این تنها موردی است که هر دو رقیب صریحاً در فهرست «never mentions» خودشان دارند. محکم‌ترین زمین خالی. هشدار: طرح آن ادعای سلامت است و بدون شاهد بالینی مجاز نیست.",
+      "جواب صریح به «چند جلسه طول می‌کشد» — Complete Physio صریحاً «typical treatment duration or outcomes» را نمی‌گوید؛ LPAW هم آن را به‌عنوان ادعا نمی‌گوید و فقط در یک نقل‌قول بیمار «recovered after 3/4 months» آمده. یعنی هیچ‌کس این را به‌عنوان وعده‌ی خودش نمی‌گوید. همان هشدار ادعای سلامت اینجا هم هست.",
+      "زمان انتظار تا نوبت — Complete Physio صریحاً نمی‌گوید و در محتوای LPAW هم هیچ اشاره‌ای به آن نیست.",
+      "قیمت شفاف برای بیمار خودپرداز روی خود صفحه — LPAW صریحاً این را ندارد و Complete Physio هم روی صفحه‌ی اصلی عددی نمی‌گذارد (فقط یک صفحه‌ی جدا دارد). ما هم هیچ عددی نداریم؛ این زمین خالی است ولی پر کردنش یعنی افشای قیمت.",
+      "مقایسه‌ی هزینه با رقبا — Complete Physio صریحاً نمی‌گوید؛ LPAW هم چیزی در این باره ندارد.",
+      "دسترسی از طریق NHS — LPAW صریحاً نمی‌گوید؛ در محتوای Complete Physio هم نیامده.",
+      "سونوگرافی تشخیصی در محل و تزریق زیر گاید سونوگرافی — در محتوای هیچ‌کدام از دو رقیب نیامده.",
+      "پروتکل درمانی مشخص برای ACL (Cross Bracing) — در محتوای هیچ‌کدام از دو رقیب نیامده.",
+      "سنجش عددی و تحلیل حرکت: تحلیل ویدیویی دویدن، پیست سرپوشیده، صفحه‌ی نیرو و تست قدرت — در محتوای هیچ‌کدام از دو رقیب نیامده. LPAW تجهیزات نادر دارد ولی از جنس درمان است، نه اندازه‌گیری.",
+      "سابقه‌ی تیم المپیک یا هر ارجاع به سطح ورزش نخبه — در محتوای هیچ‌کدام از دو رقیب نیامده.",
+      "مخاطب زن باردار — در محتوای هیچ‌کدام از دو رقیب نیامده.",
+      "مخاطب سازمانی و ارزیابی محل کار — در محتوای هیچ‌کدام از دو رقیب نیامده، درحالی‌که هر دو مخاطب را «حرفه‌ای شاغل» تعریف می‌کنند.",
+      "مشاوره‌ی آنلاین و درمان بدون قید جغرافیا — در محتوای هیچ‌کدام از دو رقیب نیامده.",
+      "نقطه‌ی ورود ارزان یا «اولین قدم» مشخص — در محتوای هیچ‌کدام از دو رقیب چنین چیزی نیست. ما هم نداریم؛ پس زمین خالی است ولی فعلاً دارایی متناظرش را نداریم."
+    ]
+  },
+  "onlyWeHave": [
+    {
+      "asset": "سابقه‌ی حضور در تیم المپیک — «Experience includes Olympic Team involvement.» در بین دو رقیبی که دیدم، هیچ‌کدام هیچ ارجاعی به ورزش نخبه یا المپیک ندارند. هشدار: صفحه‌ی خودمان این ادعا را با نام فرد، رشته یا سال پشتیبانی نمی‌کند.",
+      "matchesEmptyLand": true,
+      "checkedAgainst": 2
+    },
+    {
+      "asset": "سونوگرافی تشخیصی در محل به‌علاوه‌ی تزریق زیر گاید سونوگرافی توسط clinical specialist — «diagnostic ultrasound equipment» و «ultrasound-guided injections». در بین دو رقیبی که دیدم، هیچ‌کدام این را ندارند.",
+      "matchesEmptyLand": true,
+      "checkedAgainst": 2
+    },
+    {
+      "asset": "پروتکل Cross Bracing برای آسیب ACL — در بین دو رقیبی که دیدم، هیچ‌کدام پروتکل نام‌دار مخصوص ACL ندارند. هشدار: ادعای درمان جایگزین جراحی است و محتوایش بدون تأیید بالینی مجاز نیست.",
+      "matchesEmptyLand": true,
+      "checkedAgainst": 2
+    },
+    {
+      "asset": "تحلیل ویدیویی دویدن روی پیست سرپوشیده‌ی ۲۰ متری در محل — «indoor 20-meter sprint track». در بین دو رقیبی که دیدم، هیچ‌کدام چنین فضایی ندارند. اتصال پیست به این خدمت استنباط است، نه گفته‌ی صفحه.",
+      "matchesEmptyLand": true,
+      "checkedAgainst": 2
+    },
+    {
+      "asset": "تست قدرت با صفحه‌ی نیروی VALD — خروجی عددی و قابل نمایش. در بین دو رقیبی که دیدم، هیچ‌کدام هیچ ابزار سنجش عددی معرفی نمی‌کنند. این تنها دارایی ماست که مستقیماً به بزرگ‌ترین زمین خالی (نبود عدد و نتیجه) وصل می‌شود.",
+      "matchesEmptyLand": true,
+      "checkedAgainst": 2
+    },
+    {
+      "asset": "پیلاتس بارداری — در بین دو رقیبی که دیدم، هیچ‌کدام مخاطب باردار ندارند.",
+      "matchesEmptyLand": true,
+      "checkedAgainst": 2
+    },
+    {
+      "asset": "ارزیابی محل کار (Workstation Assessment) — تنها خدمت با مشتری سازمانی. در بین دو رقیبی که دیدم، هیچ‌کدام چنین خدمتی ندارند، با اینکه هر دو مخاطب را حرفه‌ای شاغل می‌دانند.",
+      "matchesEmptyLand": true,
+      "checkedAgainst": 2
+    },
+    {
+      "asset": "مشاوره‌ی آنلاین — تنها خدمتی که مخاطبش لازم نیست در لندن باشد. در بین دو رقیبی که دیدم، هیچ‌کدام مسیر آنلاین اعلام نکرده‌اند.",
+      "matchesEmptyLand": true,
+      "checkedAgainst": 2
+    },
+    {
+      "asset": "موقعیت وست‌اند، ۳۳ Great Titchfield Street، پنج دقیقه تا مترو Oxford Circus. در بین دو رقیبی که دیدم، LPAW در شرق لندن است؛ اما Complete Physio ۶ کلینیک در لندن دارد و ممکن است یکی از آن‌ها هم مرکزی باشد — محتوای صفحه‌اش آدرس‌ها را نمی‌گوید. پس این را انحصار قطعی نمی‌دانم.",
+      "matchesEmptyLand": false,
+      "checkedAgainst": 2
+    },
+    {
+      "asset": "شعار دوقطبی «Olympic level Physiotherapy available for everyone» — کنار هم گذاشتن نخبه و فراگیر. در بین دو رقیبی که دیدم، هیچ‌کدام این دو را با هم نمی‌گویند: یکی روی اعتماد انبوه ایستاده و دیگری روی تخصصی‌بودن.",
+      "matchesEmptyLand": true,
+      "checkedAgainst": 2
+    }
+  ],
+  "unreadable": [],
+  "confident": 0.35
+}

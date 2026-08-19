@@ -1,0 +1,5 @@
+node_modules/
+.vohu/
+.env
+*.log
+extraction-*.json

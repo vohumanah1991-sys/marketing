@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>وُهو — یک ماه</title><style>
+:root{--bg:#faf9f7;--card:#fff;--ink:#1a1917;--dim:#6f6b65;--line:#e6e2db;--v:#6d4aff;--vs:#f3f0ff;
+--ok:#15803d;--oks:#eaf6ee;--amb:#a16207;--ambs:#fdf6e3;--red:#b91c1c;--reds:#fdeceb}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Vazirmatn","IRANSans","SF Pro Text","Segoe UI",Tahoma,system-ui,sans-serif;line-height:1.9;font-size:16px}
+.app{max-width:520px;margin:0 auto}
+.st{position:absolute;opacity:0;pointer-events:none}
+header{padding:15px 20px 11px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+.brand{font-weight:700;font-size:14.5px}
+.dots{display:flex;gap:4px;margin-top:9px}
+.dots i{height:3px;flex:1;background:var(--line);border-radius:9px}
+main{padding:24px 20px 44px}
+.step{display:none}
+#s0:checked ~ main .step:nth-of-type(1){display:block}
+#s1:checked ~ main .step:nth-of-type(2){display:block}
+#s2:checked ~ main .step:nth-of-type(3){display:block}
+#s3:checked ~ main .step:nth-of-type(4){display:block}
+#s4:checked ~ main .step:nth-of-type(5){display:block}
+#s5:checked ~ main .step:nth-of-type(6){display:block}
+#s6:checked ~ main .step:nth-of-type(7){display:block}
+#s7:checked ~ main .step:nth-of-type(8){display:block}
+#s0:checked ~ header .dots i:nth-child(-n+1){background:#c9bcff}
+#s0:checked ~ header .dots i:nth-child(1){background:#6d4aff}
+#s1:checked ~ header .dots i:nth-child(-n+2){background:#c9bcff}
+#s1:checked ~ header .dots i:nth-child(2){background:#6d4aff}
+#s2:checked ~ header .dots i:nth-child(-n+3){background:#c9bcff}
+#s2:checked ~ header .dots i:nth-child(3){background:#6d4aff}
+#s3:checked ~ header .dots i:nth-child(-n+4){background:#c9bcff}
+#s3:checked ~ header .dots i:nth-child(4){background:#6d4aff}
+#s4:checked ~ header .dots i:nth-child(-n+5){background:#c9bcff}
+#s4:checked ~ header .dots i:nth-child(5){background:#6d4aff}
+#s5:checked ~ header .dots i:nth-child(-n+6){background:#c9bcff}
+#s5:checked ~ header .dots i:nth-child(6){background:#6d4aff}
+#s6:checked ~ header .dots i:nth-child(-n+7){background:#c9bcff}
+#s6:checked ~ header .dots i:nth-child(7){background:#6d4aff}
+#s7:checked ~ header .dots i:nth-child(-n+8){background:#c9bcff}
+#s7:checked ~ header .dots i:nth-child(8){background:#6d4aff}
+.day{display:inline-block;font-size:11.5px;color:var(--v);background:var(--vs);border-radius:20px;padding:3px 12px;margin-bottom:14px;font-weight:600}
+h2{font-size:21px;margin:0 0 14px;line-height:1.55}
+p{margin:0 0 14px}
+.sm{font-size:14px;color:var(--dim);line-height:1.95}
+.chat .v{background:var(--vs);border-radius:16px 16px 16px 4px;padding:14px 17px;font-size:15.5px;margin-bottom:12px}
+.me{background:var(--card);border:1px solid var(--line);border-radius:16px 16px 4px 16px;padding:14px 17px;font-size:15.5px;margin:0 0 14px;margin-right:38px}
+.post{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px 17px;font-size:14.5px;line-height:2.1;white-space:pre-line}
+.strike{background:var(--reds);border-radius:11px;padding:11px 15px;font-size:15px;text-decoration:line-through;text-decoration-color:#c98a86;color:#8c3b36;margin-bottom:7px}
+.ok{background:var(--oks);border-radius:11px;padding:11px 15px;font-size:15px;color:var(--ok);margin-bottom:7px}
+.why{font-size:14px;color:var(--dim);margin:0 0 18px;padding-right:14px;line-height:1.95}
+.dec{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:15px 17px;margin-bottom:11px;position:relative}
+.dec .n{position:absolute;left:16px;top:13px;font-size:12px;color:#c9c3ba;font-weight:700}
+.dec b{display:block;font-size:15.5px;margin-bottom:5px}
+.dec p{margin:0;font-size:14px;color:var(--dim);line-height:1.95}
+.dec.keep{border-color:#c5e3cf;background:#f7fcf9}
+.q{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 15px;margin-bottom:8px;font-size:15px}
+.note{background:var(--vs);border-radius:12px;padding:13px 16px;font-size:14px;color:#4a4640;margin-top:14px;line-height:1.95}
+.old,.new{border-radius:14px;padding:14px 17px}
+.old{background:#f2f1ee;color:var(--dim)}
+.new{background:var(--oks);border:1px solid #c5e3cf}
+.old b,.new b{display:block;font-size:11.5px;margin-bottom:4px;opacity:.8}
+.old span,.new span{display:block;font-size:16px;font-weight:600;margin-bottom:6px}
+.new span{color:var(--ok)}
+.old em,.new em{font-style:normal;font-size:13.5px;line-height:1.9;display:block}
+.arr{text-align:center;color:#c9c3ba;font-size:20px;padding:6px 0}
+/* بیشتر ببین */
+.mw{display:block;margin-top:18px}
+.tgl{position:absolute;opacity:0;pointer-events:none}
+.link{display:block;text-align:center;color:var(--v);font-size:14px;padding:12px;
+ border:1px solid #ded3ff;border-radius:12px;cursor:pointer;user-select:none;background:var(--vs)}
+.link::after{content:" ↓"}
+.fold{display:none;padding-top:6px}
+.tgl:checked ~ .link{background:var(--card);border-color:var(--line);color:var(--dim)}
+.tgl:checked ~ .link::after{content:" ↑"}
+.tgl:checked ~ .fold{display:block}
+.mh{font-size:11.5px;color:var(--dim);letter-spacing:.04em;margin:18px 0 8px;font-weight:600}
+.quote{background:var(--vs);border-radius:13px;padding:14px 17px;font-size:15.5px;font-weight:600;line-height:2}
+.bars{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;direction:ltr;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:11px;white-space:pre;overflow-x:auto}
+.tr{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 13px;margin-bottom:6px;font-size:14px}
+.cl{font-size:13.5px;padding:8px 0;border-bottom:1px solid #f2efea;line-height:1.9}
+.cl:last-child{border:none}
+.tag{display:inline-block;font-size:10.5px;border-radius:6px;padding:2px 8px;font-weight:600}
+.t-f{background:var(--oks);color:var(--ok)} .t-h{background:var(--ambs);color:var(--amb)}
+.t-w{background:var(--reds);color:var(--red)} .t-n{background:#f0eee9;color:var(--dim)}
+.kinds div{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:11px 14px;margin-bottom:7px}
+.kinds b{display:block;font-size:14px;margin-bottom:3px}
+.kinds span{font-size:13px;color:var(--dim);line-height:1.85}
+.btn{display:block;background:var(--v);color:#fff;border-radius:14px;padding:16px;font-weight:600;margin-top:14px;text-align:center;cursor:pointer;user-select:none;font-size:16px}
+.btn:active{transform:scale(.985)}
+.btn.g{background:var(--card);color:var(--ink);border:1px solid var(--line);font-weight:500}
+</style></head><body><div class="app">
+<input type="radio" name="st" id="s0" class="st" checked><input type="radio" name="st" id="s1" class="st"><input type="radio" name="st" id="s2" class="st"><input type="radio" name="st" id="s3" class="st"><input type="radio" name="st" id="s4" class="st"><input type="radio" name="st" id="s5" class="st"><input type="radio" name="st" id="s6" class="st"><input type="radio" name="st" id="s7" class="st">
+<header><div class="brand">وُهو <span style="color:var(--dim);font-weight:400;font-size:12.5px">· یک ماه با هاتی شاپ</span></div>
+<div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></header>
+<main><section class="step"><div class="day">روز ۱</div><h2>لینک پیجت را دادی</h2><p>وُهو دو دقیقه بعد یک جمله گفت، سه سؤال پرسید، و یک برنامه داد. تو تأییدش کردی.</p>
+<p class="sm">این‌ها را در نمونه‌ی قبل دیدی. حالا ببینیم بعدش چه شد.</p><label class="mw"><input type="checkbox" class="tgl"><span class="link">بیشتر ببین</span><div class="fold"><div class="mh">آن جمله این بود</div>
+<div class="quote">در صفحه‌ی اولتان ارزان‌ترین چیزی که نشان می‌دهید ۲٬۴۴۹٬۰۰۰ تومان است، ولی داخل دسته‌ها دستمال مرطوب ۵۵٬۰۰۰ تومانی دارید.
+راه ارزانِ شروع را دارید؛ فقط جایی که اول دیده می‌شود نگذاشته‌اید.</div>
+<div class="mh">و پشت صحنه، هر هفت الگو اجرا شده بود</div>
+<div class="bars">asset_voice ████████████···· 0.74
+positioning ················ 0.00
+audience    ················ 0.00
+proof       ████████████···· 0.78
+fear        ███████········· 0.42
+entry_point ██████████████·· 0.85
+operations  ██████████······ 0.60</div>
+<p class="sm">دو تا صفرند چون رقبا هنوز خوانده نشده بودند. یکی انتخاب شد، بقیه ذخیره ماندند.</p></div></label><label class="btn" for="s1">ادامه</label></section><section class="step"><div class="day">هنوز روز ۱</div><h2>چهار پست آماده شد</h2><div class="chat"><div class="v">این هم پست اول:</div></div>
+<div class="post">همه می‌نویسن «تضمین اصالت». فروشنده‌ی تقلبی هم دقیقاً همینو می‌نویسه.
+پس ما یه کار دیگه می‌کنیم: به‌جای گفتن، نشون می‌دیم.
+فاکتور خریدش از واردکننده رو داریم و پلمبش رو جلوی دوربین باز می‌کنیم.
+اگه می‌خوای عکس فاکتور همین محصول برات بیاد، تو دایرکت بنویس «اصالت».</div><label class="mw"><input type="checkbox" class="tgl"><span class="link">بیشتر ببین</span><div class="fold"><div class="mh">هیچ پستی بی‌پدر نیست</div>
+<p class="sm">برای هر پست می‌شود پرسید «چرا این؟» و جواب تا برنامه دنبال می‌شود:</p>
+<div class="tr">پست ۱ ← خانه‌ی «دلیل باور» — فاکتور واردکننده</div>
+<div class="tr">پست ۲ ← خانه‌ی «پیام» — اصل بودنش را ثابت می‌کنم</div>
+<div class="tr">پست ۳ ← خانه‌ی «مخاطب» — کسی که می‌ترسد تقلبی باشد</div>
+<div class="tr">پست ۴ ← خانه‌ی «اقدام» — کلمه‌ی اصالت در دایرکت</div>
+<p class="sm">اگر پستی به هیچ خانه‌ای وصل نشود، ساخته نمی‌شود.</p></div></label><label class="btn" for="s2">ادامه</label></section><section class="step"><div class="day">قبل از انتشار</div><h2>وُهو جلویش را گرفت</h2><div class="chat"><div class="v">قبل از انتشار، دو جمله را برداشتم.</div></div>
+<div class="strike">«تضمین اصالت»</div>
+<div class="why">تو گفتی فاکتور از واردکننده داری — ولی این جمله یعنی <b>همه‌ی</b> محصولات.
+گفته‌ی کلی تو، ادعای کلی را پشتیبانی نمی‌کند. جایش نوشتم «از نمایندگی می‌خرم و فاکتور دارم».</div>
+<div class="strike">«بهترین کرم پودر بازار»</div>
+<div class="why">این یا درست است یا غلط، و هیچ شاهدی برایش نداریم.</div>
+<div class="ok">✓ «۷ روز مهلت مرجوعی» ماند</div>
+<div class="why">چون در صفحه‌ی قوانین خودت نوشته شده.</div><label class="mw"><input type="checkbox" class="tgl"><span class="link">بیشتر ببین</span><div class="fold"><div class="mh">کل بررسی: 32 جمله، چهار دسته</div>
+<div class="kinds">
+<div><b>قابل بررسی</b><span>یا درست است یا غلط. شاهد می‌خواهد.<br>«عیار ۹۹۹» · «هر وقت بخواهید بازخرید می‌کنیم»</span></div>
+<div><b>سلیقه</b><span>آزاد است.<br>«زیباترین طرح» · «هدیه‌ای که می‌ماند»</span></div>
+<div><b>درباره‌ی شخص</b><span>فقط با اجازه‌ی خودت.<br>«با تحصیلات علوم پزشکی» · «۱۵ سال تجربه»</span></div>
+<div><b>قول</b><span>سد نمی‌شود، ولی می‌پرسم واقعاً انجامش می‌دهی؟<br>«پلمب را جلوی دوربین باز می‌کنیم»</span></div>
+</div>
+<div class="mh">نمونه‌ی بسته‌شده‌ها</div><div class="cl"><span class="tag t-w">بسته</span> همه می‌نویسن «تضمین اصالت».</div><div class="cl"><span class="tag t-w">بسته</span> فروشنده‌ی تقلبی هم دقیقاً همینو می‌نویسه.</div><div class="cl"><span class="tag t-w">بسته</span> فاکتور خریدش از واردکننده رو داریم.</div><div class="cl"><span class="tag t-w">بسته</span> فاکتور خرید از واردکننده‌ی همین قلم رو داریم.</div><div class="cl"><span class="tag t-w">بسته</span> تو ویدیو فقط دست ماست و جعبه‌ی پلمب‌شده.</div>
+<div class="mh">و آنچه ماند</div><div class="cl"><span class="tag t-f">تأیید</span> سفارش هم همین‌جا تو دایرکت انجام می‌شه، لازم نیست جای دیگه بری.</div><div class="cl"><span class="tag t-f">تأیید</span> فاکتور واردکننده هست.</div><div class="cl"><span class="tag t-f">تأیید</span> اگه بعدش خواستی سفارش بدی، همون‌جا تو دایرکت هماهنگ می‌کنیم.</div>
+<p class="sm">قیمت‌ها «کهنه» علامت خوردند چون خودت گفتی سایت به‌روز نیست.</p></div></label><label class="btn" for="s3">ادامه</label></section><section class="step"><div class="day">دو هفته بعد</div><h2>وُهو خودش پیام داد</h2><div class="chat"><div class="v">دو هفته پیش گفتم انتظار دارم جنس سؤال‌های دایرکت عوض شود —
+به‌جای «اصله؟» بیشتر «چطور سفارش بدم؟».<br><br><b>شد؟</b></div></div>
+<div class="me">یه کم. ولی خیلی نه.<br>راستش دو تا از چهار پست رو نذاشتم، سرم شلوغ بود.</div><label class="mw"><input type="checkbox" class="tgl"><span class="link">بیشتر ببین</span><div class="fold"><div class="mh">چرا این پیش‌بینی و نه یک عدد</div>
+<p class="sm">وُهو نگفت «نرخ تبدیل ۱۲٪ رشد می‌کند». چون به آن عدد دسترسی ندارد و ساختنش دروغ است.</p>
+<p class="sm">پیش‌بینی باید چیزی باشد که <b>تو با چشم خودت ببینی</b> — جنس سؤال‌های دایرکت.</p>
+<div class="mh">و بدون پیش‌بینی، یادگیری ممکن نیست</div>
+<p class="sm">اگر از قبل نگفته باشی انتظار چه داری، دو هفته بعد هر نتیجه‌ای را می‌شود توجیه کرد.
+برای همین ثبت پیش‌بینی یکی از چهار قانون وُهوست.</p></div></label><label class="btn" for="s4">ادامه</label></section><section class="step"><div class="day">همان لحظه</div><h2>سه تصمیم گرفت</h2><div class="dec"><span class="n">۱</span><b>فکر را حذف نکرد</b>
+<p>تو گفتی نصف کمپین اجرا نشد. آزمایش ناقص، آزمایش نیست — پس این دور اصلاً به حساب درستی یا غلطی آن فکر گذاشته نشد.</p></div>
+<div class="dec"><span class="n">۲</span><b>برای خودش بهانه نتراشید</b>
+<p>اگر تو دلیلی نگفته بودی، ثبت می‌شد «فکر ضعیف بود». علت شکست را فقط تو می‌توانی بگویی، نه وُهو.</p></div>
+<div class="dec"><span class="n">۳</span><b>یک چیز یاد گرفت — ولی نه آنچه انتظار داری</b>
+<p>یاد نگرفت که چه محتوایی بهتر است. یاد گرفت که <b>چهار پست برای تو زیاد است</b>. دفعه‌ی بعد دو تا.</p></div><label class="mw"><input type="checkbox" class="tgl"><span class="link">بیشتر ببین</span><div class="fold"><div class="mh">چهار حالت ممکن بود</div>
+<div class="tr">تأیید شد — پیش‌بینی محقق شد</div>
+<div class="tr">ضعیف شد — محقق نشد و دلیل روشنی هم نبود</div>
+<div class="tr"><b>نامشخص — آزمایش خودش معتبر نبود</b> ← این یکی</div>
+<div class="tr">رد شد — نتیجه‌ی برعکس دیده شد</div>
+<div class="mh">و سه محافظ که جلوی خطا را می‌گیرند</div>
+<p class="sm"><b>یک:</b> فکری که سه بار امتحان شد و نگرفت، بازنشسته می‌شود — هر توجیهی هم داشته باشد.</p>
+<p class="sm"><b>دو:</b> «نامشخص» فقط وقتی مجاز است که <b>تو</b> علت را گفته باشی.</p>
+<p class="sm"><b>سه:</b> اگر مسیر خرید وسط کمپین قطع بوده، نتیجه به حساب فکر گذاشته نمی‌شود.</p>
+<div class="mh">و همین قاعده در دو جای دیگر هم هست</div>
+<p class="sm">دوری که مریض بودی به حساب ظرفیتت گذاشته نمی‌شود. و با نمونه‌ی کم، هیچ الگویی اعلام نمی‌شود.
+سه قاعده که جدا درآمدند و آخرش معلوم شد یک قاعده‌اند: <b>آزمایش بی‌اعتبار، آزمایش نیست.</b></p></div></label><label class="btn" for="s5">ادامه</label></section><section class="step"><div class="day">روز ۱۵</div><h2>دور دوم — از صفر شروع نشد</h2><div class="chat"><div class="v">سه چیز را نمی‌دانم:</div></div>
+<div class="q">۱. کدام‌ها را الان واقعاً توی انبار داری؟</div>
+<div class="q">۲. آن ۷ نفری که کلمه‌ی «اصالت» را فرستادند، کارشان به کجا کشید؟</div>
+<div class="q">۳. چه چیزی جلوی انتشار پست دوم را گرفت؟</div>
+<div class="note"><b>سؤال دوم را نگاه کن.</b> در دور اول اصلاً وجود نداشت.
+فقط به این دلیل هست که دور اول هفت دایرکت آمد و بعد معلوم شد کسی نمی‌داند آن هفت نفر چه شدند.</div><label class="mw"><input type="checkbox" class="tgl"><span class="link">بیشتر ببین</span><div class="fold"><div class="mh">سؤال‌های دور اول برای مقایسه</div>
+<div class="tr">۱. جای دیگری هست که با مشتری در تماس باشی؟</div>
+<div class="tr">۲. واقعاً ناموجودند یا سایت به‌روز نشده؟</div>
+<div class="tr">۳. برای اصالت چه چیزی داری که بشود نشان داد؟</div>
+<p class="sm"><b>هیچ‌کدام تکرار نشد.</b> و در دور سوم هم همین‌طور — سه سؤال تازه، صفر تکراری.</p>
+<div class="mh">و حدس‌ها کم شدند</div>
+<p class="sm">دور اول ۸ حدس · دور دوم ۷ · دور سوم ۶. هرچه بیشتر می‌داند، کمتر حدس می‌زند.</p></div></label><label class="btn" for="s6">ادامه</label></section><section class="step"><div class="day">روز ۱۵</div><h2>برنامه عوض شد</h2><div class="me">سه نفرشون قیمت پرسیدن، یکی خرید. بقیه جواب ندادن.</div>
+<div class="chat"><div class="v">پس مشکل آنجایی نبود که فکر می‌کردم.</div></div>
+<div class="cmp">
+<div class="old"><b>برنامه‌ی دور اول</b><span>اصالت را نشان بده، نه ادعا کن</span>
+<em>فرض: مردم به اصل‌بودن جنس شک دارند</em></div>
+<div class="arr">↓</div>
+<div class="new"><b>برنامه‌ی دور دوم</b><span>قیمت و موجودی را ببر داخل خود پست</span>
+<em>حالا می‌دانیم: می‌آیند، اعتماد هم می‌کنند — ولی باید بپرسند چند است و هست یا نه، و همان مکث می‌پراندشان</em></div></div><label class="mw"><input type="checkbox" class="tgl"><span class="link">بیشتر ببین</span><div class="fold"><div class="mh">و خانه‌های برنامه محکم‌تر شدند</div>
+<div class="tr">هدف — <span class="tag t-h">حدس</span> شد <span class="tag t-f">واقعیت</span></div>
+<div class="tr">مخاطب — <span class="tag t-h">حدس</span> شد <span class="tag t-f">واقعیت</span></div>
+<p class="sm">دور اول ۲ خانه از ۷ واقعیت بود. دور دوم ۴ تا.</p>
+<div class="mh">و حالت برنامه عوض شد</div>
+<p class="sm">دور اول «آزمایش کوچک» بود چون بیشتر خانه‌ها حدس بودند.
+دور دوم «کمپین کامل» — چون دیگر لازم نبود محتاطانه شروع کند.</p></div></label><label class="btn" for="s7">ادامه</label></section><section class="step"><div class="day">همین</div><h2>دو چیز که عوض شد، یک چیز که نشد</h2><div class="dec"><b>قالب عوض شد</b>
+<p>تو گفتی ویدیو گرفتن سخت است. از ریلز رفت به عکس. مشکل ایده نبود، مشکل اجرا بود.</p></div>
+<div class="dec"><b>محصولات عوض شدند</b>
+<p>فقط سه قلمی که خودت گفتی مطمئنی داری — نه آنچه در سایت نوشته شده.</p></div>
+<div class="dec keep"><b>ولی «کلمه‌ی اصالت را در دایرکت بفرست» دست‌نخورده ماند</b>
+<p>عمداً. اگر این هم عوض می‌شد، دیگر نمی‌شد نتیجه‌ی دو دور را با هم مقایسه کرد.</p></div><label class="mw"><input type="checkbox" class="tgl"><span class="link">بیشتر ببین</span><div class="fold"><div class="mh">و اگر ده دور جلو برویم</div>
+<p class="sm">این را شبیه‌سازی کردیم. حافظه از ۹ به ۴۰ گزاره رسید و کیفیت افت نکرد —
+در دور دهم هنوز سه سؤال تازه پرسید.</p>
+<p class="sm">و در دور دهم خودش نوشت: «داریم به درهای فرسوده می‌کوبیم.
+ریشه‌ی مشکل اصلاً محتوایی نیست، عملیاتی است.»</p>
+<div class="mh">آنچه هنوز هیچ‌جا نیست</div>
+<p class="sm">هیچ آدم واقعی هنوز این جمله‌ها را ندیده. همه‌ی این‌ها روی داده‌ی واقعی
+اجرا شده‌اند ولی هیچ صاحب کسب‌وکاری نگفته «بله، دقیقاً».</p>
+<p class="sm">آن تنها چیزی است که با تست به دست نمی‌آید.</p></div></label><label class="btn g" for="s0">از اول</label></section></main>
+</div></body></html>
