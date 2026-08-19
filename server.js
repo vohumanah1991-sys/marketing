@@ -8,6 +8,7 @@
  * وضعیت هر اجرا در .vohu/ ذخیره می‌شود — قابل ادامه بعد از بستن مرورگر.
  */
 
+import { envFile } from './lib/env.js';
 import express from 'express';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -17,6 +18,7 @@ import { checkContent } from './lib/pipeline.js';
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 app.use(express.json({ limit: '2mb' }));
@@ -104,9 +106,14 @@ app.post('/api/check', guard(async (req, res) => {
   res.json({ gate, claims: report.claims });
 }));
 
-app.listen(PORT, () => {
+app.listen(PORT, HOST, () => {
   const dry = process.env.VOHU_DRY_RUN ? '  · حالت خشک' : '';
   console.log(`\n  وُهو  →  http://localhost:${PORT}${dry}\n`);
-  if (!process.env.ANTHROPIC_API_KEY && !process.env.VOHU_DRY_RUN)
-    console.log('  ⚠ ANTHROPIC_API_KEY تعریف نشده\n');
+  if (process.env.VOHU_DRY_RUN) return;
+  if (!envFile)
+    console.log(`  ⚠ فایل .env پیدا نشد. باید اینجا باشد: ${path.join(here, '.env')}\n`);
+  else if (!process.env.ANTHROPIC_API_KEY)
+    console.log(`  ⚠ ${envFile} خوانده شد ولی ANTHROPIC_API_KEY داخلش نبود\n`);
+  else
+    console.log(`  ✓ کلید خوانده شد · مدل: ${process.env.VOHU_MODEL || '(تعریف نشده)'}\n`);
 });
