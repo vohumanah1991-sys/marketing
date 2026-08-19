@@ -1,4 +1,4 @@
-import * as m from '/root/work/vohuPrompts.js';
+import * as m from '../prompts/vohuPrompts.js';
 const stub={knowledge:{},posts:[],competitors:[],insight:'x',answers:{},constraints:[],
  pageContent:'x',userNote:'',mission:'m',content:'x',today:'t',card:{},prediction:'p',
  userAnswer:'y',userReason:null,edits:[],hypothesisHistory:[],operationalLevelAtRun:'x',

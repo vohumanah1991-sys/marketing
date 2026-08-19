@@ -9,12 +9,23 @@
  */
 
 import * as V from '../prompts/vohuPrompts.js';
+import { sourceList, classify, whyBlocked, normalizeSource } from '../lib/session.js';
+import { apifyEnabled, classifyInstagramUrl, redact } from '../services/apify.js';
+import { itemsToText, contentType, extractTags, readTranscript, buildContentItem, itemToText } from '../lib/instagram.js';
+import { resolveLimits } from '../lib/igSync.js';
+import { isRealText, textResult, dedupeTexts } from '../services/media.js';
 
 let pass = 0, fail = 0;
 const failures = [];
 
+const pending = [];
 function t(name, fn) {
-  try { fn(); pass++; }
+  try {
+    const r = fn();
+    if (r && typeof r.then === 'function') {
+      pending.push(r.then(() => { pass++; }, e => { fail++; failures.push(`${name}\n     ${e.message}`); }));
+    } else pass++;
+  }
   catch (e) { fail++; failures.push(`${name}\n     ${e.message}`); }
 }
 function eq(a, b, msg)  { if (a !== b) throw new Error(`${msg || ''} — انتظار ${JSON.stringify(b)}، دریافت ${JSON.stringify(a)}`); }
@@ -242,7 +253,191 @@ t('محصول نامطمئن از کاربر پرسیده می‌شود', () => 
   ok(r.askUser);
 });
 
+// ═══ منابع چندگانه ═══
+t('چند منبع با هم خوانده می‌شوند، نه یکی به‌جای دیگری', () => {
+  const l = sourceList({ url:'mokaab.ir', input:{ sources:['instagram.com/mokaab','t.me/mokaab'] } });
+  eq(l.length, 3, 'هر سه منبع باید در فهرست باشند');
+  eq(l[0].kind, 'site');
+  eq(l[1].kind, 'instagram');
+  eq(l[2].kind, 'telegram');
+  ok(l.every(x => x.url.startsWith('https://')), 'همه باید https شوند');
+});
+t('منبع تکراری دو بار خوانده نمی‌شود', () => {
+  const l = sourceList({ url:'https://a.com', input:{ sources:['a.com','https://a.com'] } });
+  eq(l.length, 1);
+});
+t('اجرای قدیمی با یک url هنوز کار می‌کند', () => {
+  eq(sourceList({ url:'a.com', input:{} }).length, 1);
+});
+t('اینستاگرام به‌عنوان اینستاگرام شناخته می‌شود نه سایت', () => {
+  eq(classify('https://www.instagram.com/x/').kind, 'instagram');
+  eq(classify('https://shop.example.com').kind, 'site');
+});
+t('علت بسته‌بودن به زبان آدمیزاد است و راه‌حل دارد', () => {
+  const w = whyBlocked('https://instagram.com/x', 'HTTP 403');
+  eq(w.kind, 'social');
+  ok(w.text.length > 30, 'باید توضیح بدهد نه فقط کد خطا');
+  ok(w.fix, 'باید بگوید کاربر چه کار کند');
+  eq(whyBlocked('https://a.com', 'timeout').kind, 'timeout');
+});
+t('پرامپت استخراج با چند منبع، غیاب و نخواندن را قاطی نمی‌کند', () => {
+  const p = V.EXTRACTION_PROMPT({ pageContent:'x', userNote:'', sources:[
+    { label:'سایت', kind:'site', ok:true },
+    { label:'اینستاگرام', kind:'instagram', ok:false, error:'HTTP 403' }]});
+  ok(p.includes('اینستاگرام'), 'باید منبع نخوانده را نام ببرد');
+  ok(/غیاب نیست/.test(p), 'باید صریح بگوید نخواندن ≠ نداشتن');
+  const one = V.EXTRACTION_PROMPT({ pageContent:'x', userNote:'', sources:[{label:'سایت',kind:'site',ok:true}] });
+  ok(!/غیاب نیست/.test(one), 'با یک منبع این بخش نباید بیاید');
+});
+
+t('ورودی کوتاه بدون @ و www و https پذیرفته می‌شود', () => {
+  eq(normalizeSource('instagram','mokaab'), 'https://www.instagram.com/mokaab');
+  eq(normalizeSource('instagram','@mokaab'), 'https://www.instagram.com/mokaab');
+  eq(normalizeSource('instagram','instagram.com/mokaab/'), 'https://www.instagram.com/mokaab');
+  eq(normalizeSource('instagram','https://www.instagram.com/mokaab?hl=fa'), 'https://www.instagram.com/mokaab');
+  eq(normalizeSource('telegram','@mokaab'), 'https://t.me/mokaab');
+  eq(normalizeSource('telegram','t.me/mokaab'), 'https://t.me/mokaab');
+  eq(normalizeSource('site','www.mokaab.ir'), 'https://mokaab.ir');
+  eq(normalizeSource('site','mokaab.ir/'), 'https://mokaab.ir');
+});
+t('ورودی بی‌معنی رد می‌شود نه اینکه آدرس بی‌ربط بسازد', () => {
+  eq(normalizeSource('site','mokaab'), null, 'سایت بدون نقطه آدرس نیست');
+  eq(normalizeSource('instagram',''), null);
+  eq(normalizeSource('instagram','@'), null);
+});
+
+// ═══ اینستاگرام / Apify ═══
+t('بدون توکن، Apify خاموش است — بی‌اجازه پول خرج نمی‌شود', () => {
+  const saved = process.env.APIFY_TOKEN;
+  delete process.env.APIFY_TOKEN;
+  ok(!apifyEnabled(), 'بدون توکن باید خاموش باشد');
+  process.env.APIFY_TOKEN = 'x';
+  ok(apifyEnabled(), 'با توکن باید روشن شود');
+  if (saved === undefined) delete process.env.APIFY_TOKEN; else process.env.APIFY_TOKEN = saved;
+});
+t('محتوای بدون آمار، صفر نمی‌گیرد', () => {
+  const txt = itemsToText([{ type:'image', caption:'سلام', metrics:{likes:null,comments:null,views:null}, slides:[], comments:[] }]);
+  ok(!/0 لایک/.test(txt), 'نبودِ عدد نباید به صفر تبدیل شود');
+  ok(/سلام/.test(txt));
+});
+t('محتوای با آمار، عددش را نشان می‌دهد', () => {
+  const txt = itemsToText([{ type:'reel', caption:'متن', publishedAt:'2026-08-01T00:00:00Z',
+    metrics:{likes:120,comments:8,views:null,shares:3}, slides:[], comments:[] }]);
+  ok(/120 لایک/.test(txt) && /8 کامنت/.test(txt) && /3 اشتراک/.test(txt));
+  ok(/2026-08-01/.test(txt), 'تاریخ باید بیاید — کهنگی مهم است');
+});
+t('برش شناخت برای محتوا، فهرست محصولات را نمی‌فرستد', () => {
+  const k = { brand:{v:1}, audience:{v:2}, products:[{name:'a'},{name:'b'}], productUsability:[{product:'a',usable:'yes'}] };
+  const c = V.knowledgeFor('content', k);
+  ok(c.brand && c.audience, 'صدا و مخاطب لازم است');
+  ok(!c.products && !c.usableProducts, 'موجودی لازم نیست');
+});
+
+// ═══ استخراج عمیق اینستاگرام ═══
+t('توکن Apify هرگز در لاگ یا خروجی نمی‌آید', () => {
+  const dirty = 'خطا: Bearer apify_api_SECRET123 و ?token=apify_api_OTHER در URL';
+  const clean = redact(dirty);
+  ok(!/SECRET123/.test(clean) && !/OTHER/.test(clean), 'توکن باید کاملاً پاک شود');
+});
+t('نوع لینک درست تشخیص داده می‌شود', () => {
+  eq(classifyInstagramUrl('https://www.instagram.com/mokaab/').kind, 'profile');
+  eq(classifyInstagramUrl('https://instagram.com/reel/AB1/').kind, 'reel');
+  eq(classifyInstagramUrl('https://instagram.com/p/AB1/').kind, 'post');
+  eq(classifyInstagramUrl('https://instagram.com/explore/tags/x/').kind, 'unknown');
+  eq(classifyInstagramUrl('https://example.com/p/AB1/').kind, 'unknown');
+});
+t('پست اسلایدی از تک‌عکس تشخیص داده می‌شود', () => {
+  eq(contentType({ type:'Sidecar', childPosts:[{},{}] }), 'carousel');
+  eq(contentType({ type:'Image' }), 'image');
+  eq(contentType({ type:'Video', productType:'clips', videoUrl:'x' }), 'reel');
+});
+t('لینک صدا یا ویدئو به‌عنوان متن پذیرفته نمی‌شود', () => {
+  eq(readTranscript({ transcript:'https://cdn.example.com/a.mp3' }).status, 'failed');
+  eq(readTranscript({ transcript:'https://x.com/v.mp4' }).status, 'failed');
+  eq(readTranscript({ transcript:'سلام امروز درباره عیار طلا حرف می‌زنیم' }).status, 'ok');
+  ok(!isRealText('https://a.com/x.mp4'), 'لینک متن نیست');
+});
+t('متن خالی به‌عنوان استخراج موفق ثبت نمی‌شود', () => {
+  eq(textResult('').status, 'failed');
+  eq(textResult('   ').status, 'failed');
+  eq(textResult('...').status, 'failed');
+  eq(textResult('متن واقعی').status, 'ok');
+  eq(textResult('').text, '', 'متن خالی باید خالی بماند نه اینکه چیزی ساخته شود');
+});
+t('Save و Reach همیشه null‌اند و هیچ‌وقت حدس زده نمی‌شوند', async () => {
+  const it = await buildContentItem({ type:'Image', likesCount:10 }, { withMedia:false });
+  eq(it.metrics.saves, null);
+  eq(it.metrics.reach, null);
+  eq(it.metrics.shares, null, 'نبودِ shares باید null بماند نه صفر');
+  eq(it.metrics.likes, 10);
+});
+t('متن تکراری حذف می‌شود ولی جای هر متن معلوم می‌ماند', () => {
+  const d = dedupeTexts([{text:'تخفیف ویژه',at:1},{text:'تخفیف ویژه',at:2},{text:'کد تخفیف',at:3}]);
+  eq(d.length, 2);
+  eq(d[0].at, 1);
+  ok(d[0].alsoAt.includes(2), 'باید بگوید در اسلاید ۲ هم بود');
+});
+t('پرامپت تحلیل، نخوانده را با نبوده اشتباه نمی‌گیرد', () => {
+  const p = V.CONTENT_ITEM_PROMPT({ item:{
+    type:'reel', speechStatus:'failed', speechError:'اکتور transcript نداد',
+    imageTextStatus:'ok', metrics:{likes:5,saves:null,reach:null}, __text:'x' }});
+  ok(/غایب نیستند/.test(p), 'باید صریح بگوید نخوانده ≠ نبوده');
+  ok(/ذخیره و ریچ/.test(p), 'باید درباره‌ی null بودن ذخیره و ریچ هشدار بدهد');
+});
+t('دلیل عملکرد هرگز واقعیت نیست', () => {
+  const en = V.CONTENT_ITEM_SCHEMA.properties.performance.properties.status.enum;
+  ok(!en.includes('fact'), 'وضعیت عملکرد نباید هیچ‌وقت fact باشد');
+  ok(en.includes('hypothesis') && en.includes('inconclusive'));
+});
+
+t('پیش‌فرض ۱۰ پست و ۱۰ ریلز است، جدا از هم', () => {
+  const d = resolveLimits();
+  eq(d.posts, 10); eq(d.reels, 10);
+});
+t('می‌شود بیشتر خواست، و می‌شود یکی را خاموش کرد', () => {
+  eq(resolveLimits({posts:30,reels:20}).posts, 30);
+  eq(resolveLimits({posts:30,reels:20}).reels, 20);
+  eq(resolveLimits({posts:0}).posts, 0, 'صفر یعنی نخوان، نه اینکه پیش‌فرض بگیرد');
+  eq(resolveLimits({posts:0}).reels, 10, 'خاموش‌کردن یکی نباید دیگری را عوض کند');
+});
+t('ورودی بی‌معنی به پیش‌فرض برمی‌گردد و سقف رعایت می‌شود', () => {
+  eq(resolveLimits({posts:'abc'}).posts, 10);
+  eq(resolveLimits({reels:-5}).reels, 10);
+  ok(resolveLimits({posts:99999}).posts <= 200, 'سقف مطلق باید اعمال شود');
+});
+
+t('هیچ نام برند یا آدرسی در کد و رابط کاربری هاردکد نشده', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const files = ['public/index.html','lib/session.js','lib/igSync.js','lib/instagram.js',
+                 'services/apify.js','services/media.js','server.js'];
+  const bad = [];
+  for (const f of files) {
+    const txt = await readFile(new URL('../' + f, import.meta.url), 'utf8');
+    // نام‌های خاصی که فقط مال یک کاربر است نباید در کد باشد
+    for (const needle of ['mokaab', 'hatii', 'basalam.com/mokaab']) {
+      if (txt.toLowerCase().includes(needle)) bad.push(`${f}: ${needle}`);
+    }
+  }
+  eq(bad.length, 0, `هاردکد: ${bad.join(', ')}`);
+});
+t('آدرس اینستاگرام از ورودی می‌آید نه از کد', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const txt = await readFile(new URL('../lib/igSync.js', import.meta.url), 'utf8');
+  // تنها آدرس ثابت باید الگوی instagram.com/${username} باشد
+  const literals = txt.match(/https:\/\/www\.instagram\.com\/(?!\$)[a-z0-9._]+/gi) || [];
+  eq(literals.length, 0, `آدرس ثابت در کد: ${literals.join(', ')}`);
+});
+
+t('اسم هیچ مدلی در رابط کاربری هاردکد نشده', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ui = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  for (const m of ['Opus', 'opus', 'Sonnet', 'sonnet', 'Haiku', 'claude-']) {
+    ok(!ui.includes(m), `اسم مدل «${m}» در رابط کاربری نوشته شده — باید از سرور بیاید`);
+  }
+});
+
 // ═══ گزارش ═══
+await Promise.all(pending);
 console.log(`\n  ${pass} قبول · ${fail} رد\n`);
 if (fail) {
   failures.forEach(f => console.log(`  ✗ ${f}\n`));

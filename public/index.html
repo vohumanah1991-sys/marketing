@@ -73,8 +73,49 @@ const FA = {goal:'هدف',audience:'مخاطب',tension:'کشش',message:'پیا
   reasonToBelieve:'دلیل باور',action:'اقدام',successSignal:'نشانه‌ی موفقیت'};
 const PUR = {attention:'جلب توجه',case:'ساختن دلیل',objection:'برداشتن مانع',ask:'درخواست اقدام'};
 
-function spin(t){ M.innerHTML = `<div class="spin"><div><span class="d"></span><span class="d"></span><span class="d"></span></div>
-  <div style="margin-top:14px;font-size:14px">${esc(t)}</div></div>`; }
+let spinTimer = null;
+
+/**
+ * اسپینر با پیشرفت واقعی.
+ * به‌جای حدس‌زدن اینکه کجای کاریم، هر دو ثانیه از سرور می‌پرسد.
+ * اسم مدل هم از سرور می‌آید — در کد هیچ اسم مدلی نوشته نشده.
+ */
+function spin(t, live){
+  clearInterval(spinTimer);
+  const t0 = Date.now();
+  M.innerHTML = `<div class="spin"><div><span class="d"></span><span class="d"></span><span class="d"></span></div>
+    <div id="sp" style="margin-top:14px;font-size:14px">${esc(t)}</div>
+    <div id="sl" class="sm" style="margin-top:8px;opacity:.65"></div>
+    <div id="sn" class="sm" style="margin-top:6px;opacity:.5"></div></div>`;
+
+  let last = null, ticks = 0;
+
+  spinTimer = setInterval(async () => {
+    const el = $('#sl'); if(!el){ clearInterval(spinTimer); return; }
+    const sec = Math.round((Date.now()-t0)/1000);
+    el.textContent = sec + ' ثانیه';
+
+    if (!live || !url) return;
+    if (++ticks % 2) return;                 // هر ۲ ثانیه بپرس، نه هر ثانیه
+
+    try{
+      const p = await (await fetch('/api/run/progress?url=' + encodeURIComponent(url))).json();
+      if (p.label) {
+        $('#sp').textContent = p.label + '…';
+        last = p;
+      }
+      const bits = [];
+      if (p.model)   bits.push(p.model);
+      if (p.inputKB) bits.push(p.inputKB + 'KB ورودی');
+      if (p.stages?.length) bits.push(p.stages.length + ' مرحله تمام');
+      $('#sn').textContent = bits.join(' · ');
+
+      // هشدار فقط وقتی معنی دارد: یک مرحله بیش از حد طول کشیده، نه کل کار
+      if (p.elapsed != null && p.elapsed > 180)
+        el.textContent = sec + ' ثانیه · این مرحله ' + p.elapsed + ' ثانیه است — ترمینال سرور را نگاه کن';
+    }catch{}
+  }, 1000);
+}
 
 async function api(path, body, method='POST'){
   busy = true;
@@ -89,11 +130,13 @@ async function api(path, body, method='POST'){
 }
 
 function render(){
+  clearInterval(spinTimer);
   $('#who').textContent = url ? '· ' + url.replace(/^https?:\/\//,'') : '';
   $('#stg').textContent = S.stages ? S.stages.length + ' مرحله' : '';
 
   if (!url && !S.needs) return start();
   if (S.state === 'low_confidence') return lowConf();
+  if (S.needs === 'pageText')    return pageBlocked();
   if (S.needs === 'competitors') return competitors();
   if (S.needs === 'answers')     return questions();
   if (S.needs === 'approval')    return strategy();
@@ -103,23 +146,184 @@ function render(){
 
 function start(){
   M.innerHTML = `<div class="day">شروع</div>
-  <h2>لینک کسب‌وکارت را بده</h2>
-  <input id="u" placeholder="example.com یا instagram.com/name" dir="ltr" style="text-align:left">
+  <h2>هرجایی که کسب‌وکارت آنجاست</h2>
+
+  <label class="sm">سایت</label>
+  <input id="f_site" placeholder="example.com" dir="ltr" style="text-align:left" oninput="prev()">
+
+  <label class="sm">اینستاگرام — فقط آی‌دی</label>
+  <input id="f_ig" placeholder="آی‌دی پیج" dir="ltr" style="text-align:left" oninput="prev()">
+
+  <label class="sm">تلگرام — فقط آی‌دی</label>
+  <input id="f_tg" placeholder="آی‌دی کانال" dir="ltr" style="text-align:left" oninput="prev()">
+
+  <div id="pv" class="sm" style="opacity:.7;line-height:2"></div>
+
   <textarea id="n" placeholder="در یک خط چه می‌فروشی؟ (اختیاری)"></textarea>
-  <p class="sm">همین. نه هدف، نه مخاطب، نه لحن برند — هرچه خودم بتوانم بفهمم نمی‌پرسم.</p>
+  <p class="sm">بدون @ و بدون www و بدون https — خودم درست می‌کنم. هرکدام را داری بده، همه را با هم می‌خوانم.</p>
   <button onclick="go()">شروع</button>`;
+  prev();
+}
+
+// همان منطق سرور، این‌جا فقط برای نشان‌دادن
+function nrm(kind, raw){
+  let v = String(raw||'').trim().replace(/^@+/,'').replace(/\s+/g,'')
+          .replace(/^https?:\/\//i,'').replace(/^www\./i,'');
+  if(!v) return null;
+  if(kind==='instagram'){ v=v.replace(/^(?:m\.)?instagram\.com\//i,'').split(/[?#]/)[0].replace(/\/+$/,'');
+    return v ? 'instagram.com/'+v : null; }
+  if(kind==='telegram'){ v=v.replace(/^(?:t\.me|telegram\.me)\//i,'').split(/[?#]/)[0].replace(/\/+$/,'');
+    return v ? 't.me/'+v : null; }
+  v=v.replace(/\/+$/,'');
+  return v.includes('.') ? v : null;
+}
+function prev(){
+  const p = $('#pv'); if(!p) return;
+  const rows = [['site','f_site','سایت'],['instagram','f_ig','اینستاگرام'],['telegram','f_tg','تلگرام']]
+    .map(([k,id,fa]) => { const v = nrm(k, $('#'+id).value); return v ? `${fa}: <span dir="ltr">${esc(v)}</span>` : null; })
+    .filter(Boolean);
+  const site = $('#f_site').value.trim();
+  const bad  = site && !nrm('site', site) ? '<div style="color:#c33">سایت باید نقطه داشته باشد — مثل example.com</div>' : '';
+  p.innerHTML = bad + (rows.length ? 'می‌خوانم → ' + rows.join(' · ') : '');
 }
 function go(){
-  let u = $('#u').value.trim(); if(!u) return;
-  if(!/^https?:\/\//.test(u)) u = 'https://' + u;
-  url = u; spin('صفحه را می‌خوانم و کسب‌وکار را می‌فهمم…');
-  api('/api/run', { url:u, note:$('#n').value.trim() });
+  const site = $('#f_site').value.trim(), ig = $('#f_ig').value.trim(), tg = $('#f_tg').value.trim();
+  if(!site && !ig && !tg){ alert('دست‌کم یکی را پر کن.'); return; }
+  const n = [nrm('site',site), nrm('instagram',ig), nrm('telegram',tg)].filter(Boolean).length;
+  spin('منابع را می‌خوانم…', true);
+  api('/api/run', { site, instagram:ig, telegram:tg, note:$('#n').value.trim() });
+}
+
+// نوار «چه خواندم و چه نخواندم» — بالای هر صفحه‌ای که بعد از منابع می‌آید
+function sourceBar(){
+  const src = (S.page && S.page.sources) || [];
+  if (!src.length) return '';
+  const ok  = src.filter(x=>x.ok);
+  const bad = src.filter(x=>!x.ok);
+  let h = `<div class="gate">خواندم: ${ok.map(x=>esc(x.label)+(x.posts?` (${x.posts} پست)`:'')).join(' · ') || '—'}`;
+  if (bad.length) h += `<br>نخواندم: ${bad.map(x=>esc(x.label)+' ('+esc(x.error||'')+')').join(' · ')}`
+                    + `<br><span class="sm">اینها را «ندارد» حساب نکردم — «نمی‌دانم» حساب کردم.</span>`;
+  const ig = src.find(x => x.kind === 'instagram');
+  if (ig) h += `<br><button class="g" style="margin-top:10px" onclick="igScreen()">استخراج عمیق اینستاگرام</button>`;
+  return h + '</div>';
+}
+
+// ── استخراج اینستاگرام ───────────────────────────────────────
+// آدرس از منابع همین اجرا می‌آید یا کاربر خودش می‌نویسد. هیچ آدرسی در کد نیست.
+let igJob = null, igTimer = null;
+
+function igTarget(){
+  const src = (S.page && S.page.sources) || [];
+  const ig = src.find(x => x.kind === 'instagram');
+  return ig ? ig.url : '';
+}
+
+function igScreen(){
+  clearInterval(igTimer);
+  M.innerHTML = `<div class="day">اینستاگرام</div>
+  <h2>استخراج عمیق</h2>
+  <p class="sm">گفتار داخل ویدئو، نوشته‌های روی تصویر، آمار و کامنت‌ها. در پس‌زمینه اجرا می‌شود — می‌توانی صفحه را ببندی.</p>
+
+  <label class="sm">پیج، پست یا ریلز</label>
+  <input id="ig_t" dir="ltr" style="text-align:left" placeholder="آی‌دی پیج یا لینک پست/ریلز" value="${esc(igTarget())}">
+
+  <div style="display:flex;gap:10px">
+    <div style="flex:1"><label class="sm">چند پست</label>
+      <input id="ig_p" type="number" min="0" max="200" value="10" dir="ltr" style="text-align:left"></div>
+    <div style="flex:1"><label class="sm">چند ریلز</label>
+      <input id="ig_r" type="number" min="0" max="200" value="10" dir="ltr" style="text-align:left"></div>
+  </div>
+  <p class="sm">۰ یعنی آن نوع اصلاً خوانده نشود — اکتورش هم صدا زده نمی‌شود، پس هزینه‌ای ندارد.</p>
+
+  <label class="sm" style="display:block;margin-top:10px">
+    <input type="checkbox" id="ig_m" checked> گفتار و OCR هم انجام شود
+  </label>
+  <p class="sm">اگر برداری، فقط کپشن و آمار می‌آید — سریع و ارزان.</p>
+
+  <button onclick="igStart()">شروع استخراج</button>
+  <div id="ig_out" style="margin-top:18px"></div>
+  <button class="g" onclick="render()" style="margin-top:20px">برگرد</button>`;
+}
+
+async function igStart(){
+  const target = $('#ig_t').value.trim();
+  if(!target){ alert('آدرس یا آی‌دی پیج را بنویس.'); return; }
+  const body = { target,
+    posts: Number($('#ig_p').value), reels: Number($('#ig_r').value),
+    withMedia: $('#ig_m').checked };
+  $('#ig_out').innerHTML = '<p class="sm">در حال ثبت کار…</p>';
+  try{
+    const r = await fetch('/api/instagram/sync', {method:'POST',
+      headers:{'content-type':'application/json'}, body:JSON.stringify(body)});
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    igJob = j.jobId;
+    igPoll();
+  }catch(e){ $('#ig_out').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+
+function igPoll(){
+  clearInterval(igTimer);
+  igTimer = setInterval(async () => {
+    const box = $('#ig_out'); if(!box){ clearInterval(igTimer); return; }
+    try{
+      const j = await (await fetch('/api/instagram/job/' + igJob)).json();
+      const p = j.progress || {};
+      const bar = p.total ? `${p.done||0} از ${p.total}` : '';
+      box.innerHTML = `<div class="card"><b>${esc(faStatus(j.status))}</b>
+        <div class="sm">${esc(p.note||'')} ${bar}</div>
+        ${j.error?`<div class="err" style="margin-top:8px">${esc(j.error)}</div>`:''}
+        ${j.status==='done'?igResult(j.result):''}</div>`;
+      if (['done','failed','interrupted'].includes(j.status)) clearInterval(igTimer);
+    }catch(e){ clearInterval(igTimer); box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+  }, 2000);
+}
+
+const faStatus = s => ({queued:'در صف',running:'در حال اجرا',done:'تمام شد',
+  failed:'شکست خورد',interrupted:'وسط کار قطع شد'}[s] || s);
+
+function igResult(r){
+  if(!r) return '';
+  const items = r.newItems || [];
+  const ok = items.filter(i=>i.extraction?.status==='ok').length;
+  const part = items.filter(i=>i.extraction?.status==='partial').length;
+  const bad = items.filter(i=>i.extraction?.status==='failed').length;
+  const notes = (r.notes||[]).map(n=>`<div class="sm">⚠ ${esc(n)}</div>`).join('');
+  return `<div style="margin-top:10px">
+    <div class="sm">${items.length} محتوا · ${ok} کامل · ${part} ناقص · ${bad} ناموفق`
+    + (r.skipped?` · ${r.skipped} تکراری رد شد`:'') + `</div>${notes}
+    ${items.slice(0,6).map(i=>`<div class="pc"><div class="n">${esc(i.type||'')} ${i.publishedAt?'· '+esc(i.publishedAt.slice(0,10)):''}</div>
+      <div class="a">${esc((i.caption||'(بدون کپشن)').slice(0,90))}</div>
+      <div class="sm">گفتار: ${esc(faExt(i.speechStatus))} · روی تصویر: ${esc(faExt(i.imageTextStatus))}`
+      + (i.metrics?.likes!=null?` · ${i.metrics.likes} لایک`:'') + `</div></div>`).join('')}
+    ${items.length>6?`<p class="sm">و ${items.length-6} تای دیگر — در «محتواهای ذخیره‌شده» ببین</p>`:''}
+  </div>`;
+}
+const faExt = s => ({ok:'خوانده شد',failed:'نشد',not_available:'در دسترس نبود',
+  not_attempted:'انجام نشد'}[s] || s || '—');
+
+function pageBlocked(){
+  const e = S.pageError || {};
+  const w = e.why || {};
+  M.innerHTML = `<div class="day">نشد</div>
+  <h2>این صفحه را نتوانستم بخوانم</h2>
+  <div class="gate">${esc(w.text || e.error || 'نامعلوم')}</div>
+  <p class="sm">${esc(w.fix || '')}</p>
+  <p class="sm"><b>ادامه نمی‌دهم.</b> بدون متن صفحه، هر چیزی که بسازم حدس است نه شناخت — و قرارمان این بود که حدس را حدس بنامم، نه اینکه به‌جای واقعیت بفروشمش.</p>
+  <button class="g" onclick="reset()">آدرس دیگری می‌دهم</button>
+  <p class="sm" style="margin-top:18px">یا متن صفحه را خودت کپی کن و اینجا بچسبان:</p>
+  <textarea id="pt" rows="6" placeholder="متن صفحه را اینجا بچسبان (دست‌کم ۲۰۰ نویسه)"></textarea>
+  <button onclick="sendPageText()">با این متن ادامه بده</button>`;
+}
+function sendPageText(){
+  const t = $('#pt').value.trim();
+  if (t.length < 200) { alert('متن خیلی کوتاه است — دست‌کم ۲۰۰ نویسه لازم دارم.'); return; }
+  spin('متن را می‌خوانم و کسب‌وکار را می‌فهمم…', true);
+  api('/api/run/page-text', { url, text:t });
 }
 
 function competitors(){
-  const pg = S.page && !S.page.ok
-    ? `<div class="gate">صفحه خوانده نشد: ${esc(S.page.error)} — با همان توضیح تو جلو می‌روم.</div>` : '';
-  M.innerHTML = `${pg}<div class="day">قدم ۲</div>
+  M.innerHTML = `${sourceBar()}<div class="day">قدم ۲</div>
   <h2>سه رقیبت را اسم ببر</h2>
   <p class="sm">کسانی که مشتری بینتان مقایسه می‌کند. این تنها سؤالی است که خودم نمی‌توانم جوابش را پیدا کنم.</p>
   <input id="c1" placeholder="آدرس رقیب اول" dir="ltr" style="text-align:left">
@@ -131,7 +335,7 @@ function competitors(){
 }
 function sendComp(skip){
   const c = skip ? [] : ['c1','c2','c3'].map(i=>$('#'+i).value.trim()).filter(Boolean);
-  spin(c.length ? 'رقبا را می‌خوانم و زمین بازی را می‌سازم…' : 'بازار را درمی‌آورم…');
+  spin(c.length ? 'رقبا را می‌خوانم و زمین بازی را می‌سازم…' : 'بازار را درمی‌آورم…', true);
   api('/api/run/competitors', { url, competitors:c });
 }
 
@@ -196,7 +400,7 @@ function sendAns(){
   const w=$('#cw').value.trim();
   if(w) constraints.push({what:w,reason:$('#cr').value.trim()||'نگفته',kind:'concern_based',
     setAt:new Date().toISOString().slice(0,10),revisitWhen:['اگر کاربر خودش دوباره مطرح کند']});
-  spin('برنامه را می‌سازم…');
+  spin('برنامه را می‌سازم…', true);
   api('/api/run/answers',{url,answers,assumptions,constraints});
 }
 
@@ -224,8 +428,14 @@ function strategy(){
     تا این برنامه را تأیید نکنی، یک خط هم نمی‌نویسم.</div>
   <button onclick="approve()">تأیید می‌کنم</button>`;
 }
-function approve(){ spin('کمپین را طراحی می‌کنم…'); api('/api/run/approve',{url}); }
+function approve(){ spin('کمپین را طراحی می‌کنم…', true); api('/api/run/approve',{url}); }
 
+function usageBar(){
+  const u = S.usage; if(!u) return '';
+  return `<p class="sm" style="opacity:.6">${u.calls} فراخوانی · ${Math.round(u.seconds)} ثانیه · `
+       + `${(u.inputTokens/1000).toFixed(0)}K→${(u.outputTokens/1000).toFixed(1)}K توکن`
+       + (u.usd ? ` · $${u.usd.toFixed(2)} (${esc(u.model||'')})` : '') + `</p>`;
+}
 function campaign(){
   const c = S.campaign || {};
   M.innerHTML = `<div class="day">کمپین</div>
@@ -246,7 +456,8 @@ function campaign(){
   <textarea id="ct" placeholder="کپشنی که می‌خواهی منتشر کنی"></textarea>
   <button onclick="check()">بررسی کن</button>
   <div id="cr2"></div>
-  <button class="g" onclick="reset()" style="margin-top:24px">کسب‌وکار جدید</button>`;
+  <button class="g" onclick="reset()" style="margin-top:24px">کسب‌وکار جدید</button>
+  ${usageBar()}`;
 }
 async function check(){
   const content = $('#ct').value.trim(); if(!content) return;

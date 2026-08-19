@@ -11,6 +11,7 @@
  *   ۴. چه چیزهایی را غایب تشخیص داد  ← ورودی جمله‌ی اول
  */
 
+import '../lib/env.js';   // باید اولین import باشد — .env را می‌خواند
 import { fetchPageText } from '../services/fetchPage.js';
 import { callWithSchema } from '../services/vohuService.js';
 import { EXTRACTION_PROMPT, EXTRACTION_SCHEMA } from '../prompts/vohuPrompts.js';

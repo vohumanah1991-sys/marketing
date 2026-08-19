@@ -91,17 +91,34 @@ export const VOHU_CORE = `
    ۲. استخراج شناخت کسب‌وکار
    ══════════════════════════════════════════════════════════ */
 
-export const EXTRACTION_PROMPT = ({ pageContent, userNote }) => `
+export const EXTRACTION_PROMPT = ({ pageContent, userNote, sources = [] }) => `
 ${VOHU_CORE}
 
 # مأموریت: استخراج شناخت کسب‌وکار
 
 ورودی‌ای که داری:
---- محتوای سایت/پیج ---
+--- محتوای منابع ---
 ${pageContent}
 --- توضیح کاربر (ممکن است خالی باشد) ---
 ${userNote || '(چیزی ننوشته)'}
 ---
+${sources.length > 1 ? `
+## چند منبع داری — مراقب باش
+
+منابعی که خوانده شد:
+${sources.filter(x => x.ok).map(x => `- ${x.label} (${x.kind})`).join('\n') || '- (هیچ)'}
+
+منابعی که خوانده نشد:
+${sources.filter(x => !x.ok).map(x => `- ${x.label} — ${x.error}`).join('\n') || '- (هیچ)'}
+
+قاعده‌ها:
+۱. در source هر ادعا، **نام منبع را بنویس** — مثلاً «سایت: ...» یا «اینستاگرام: ...».
+   نقل‌قول باید پیوسته باشد و از همان منبع.
+۲. منبعی که خوانده نشد، **غیاب نیست**. اگر اینستاگرام خوانده نشد، ننویس
+   «در اینستاگرام حضور ندارد» — بنویس نمی‌دانی. این مهم‌ترین قاعده‌ی این بخش است.
+۳. اگر دو منبع حرف متفاوتی زدند، هر دو را نگه دار و تناقض را در contradictions بیاور.
+   یکی را به نفع دیگری حذف نکن.
+` : ''}
 
 ## روش کار — دو بار بخوان
 
@@ -1959,6 +1976,13 @@ export function knowledgeFor(stage, k = {}) {
         brand:       k.brand,
         categories:  [...new Set((k.products || []).map(p => p.name))].slice(0, 12) };
 
+    case 'content':
+      // خواندن محتوای گذشته به فهرست موجودی کاری ندارد — به صدا و مخاطب دارد
+      return { ...base,
+        brand:    k.brand,
+        audience: k.audience,
+        absences: k.absences };
+
     case 'strategy':
       // فقط اقلام قابل استفاده، با نام — نه کل کارت محصول
       return { ...base,
@@ -2080,3 +2104,166 @@ function hasValue(obj, path) {
   if (Array.isArray(v)) return v.length > 0;
   return v?.status === 'fact' || v?.status === 'hypothesis';
 }
+
+// ══════════════════════════════════════════════════════════════
+// تحلیل یک واحد محتوا (پست / ریلز / اسلایدی)
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * ورودی: تمام متن‌های استخراج‌شده‌ی یک محتوا + آمار عمومی.
+ * خروجی: موضوع، پیام، هوک، سبک، احساس، CTA، کلمات کلیدی، و دلیل احتمالی عملکرد.
+ *
+ * دو چیز اینجا حساس است:
+ *  ۱. «دلیل عملکرد» همیشه فرضیه است — حتی وقتی عددها هست.
+ *  ۲. اگر بخشی از متن استخراج نشده (وضعیت failed)، مدل باید بداند
+ *     که آن بخش **خوانده نشده**، نه اینکه **نبوده**.
+ */
+export const CONTENT_ITEM_PROMPT = ({ item = {}, metricsContext = null } = {}) => {
+  const m = item.metrics || {};
+  const missing = [];
+  if (item.speechStatus     && item.speechStatus     !== 'ok') missing.push(`گفتار داخل ویدئو (${item.speechError || item.speechStatus})`);
+  if (item.imageTextStatus  && item.imageTextStatus  !== 'ok') missing.push(`نوشته‌های روی تصویر (${item.imageTextError || item.imageTextStatus})`);
+  if (item.commentsStatus   && item.commentsStatus   !== 'ok') missing.push(`کامنت‌ها (${item.commentsStatus})`);
+
+  return `
+${VOHU_CORE}
+
+# مأموریت: خواندن یک محتوای منتشرشده
+
+نوع: ${item.type || '(نامعلوم)'}
+لینک: ${item.sourceUrl || '(نامعلوم)'}
+تاریخ انتشار: ${item.publishedAt || '(نامعلوم)'}
+
+--- متن‌های استخراج‌شده ---
+${item.__text || '(هیچ متنی استخراج نشد)'}
+---
+
+--- آمار عمومی ---
+${j({
+  لایک: m.likes, کامنت: m.comments, اشتراک‌گذاری: m.shares,
+  بازدید: m.views, پخش: m.plays,
+  ذخیره: m.saves, ریچ: m.reach
+})}
+
+⚠️ هر عددی که بالا null است یعنی **در داده‌ی عمومی وجود ندارد**، نه اینکه صفر است.
+ذخیره و ریچ از بیرون اصلاً قابل دیدن نیستند. درباره‌ی آن‌ها هیچ حدسی نزن.
+
+${missing.length ? `--- چیزهایی که خوانده نشد ---
+${missing.map(x => '- ' + x).join('\n')}
+
+⚠️ اینها **غایب نیستند، خوانده نشده‌اند**. ننویس «این ریلز متن روی تصویر نداشت»؛
+بنویس نمی‌دانی. این مهم‌ترین قاعده‌ی این مأموریت است.
+` : ''}
+${metricsContext ? `--- برای مقایسه، میانه‌ی همین پیج ---
+${j(metricsContext)}
+` : ''}
+## چه بده
+
+**موضوع** — درباره‌ی چیست، در یک جمله.
+
+**پیام اصلی** — اگر مخاطب فقط یک چیز یادش بماند، چه؟ (نه خلاصه‌ی محتوا؛ ادعای مرکزی)
+
+**هوک** — سه ثانیه/سطر اول چه می‌کند که آدم بماند. اگر هوکی نبود، صریح بگو نبود.
+
+**سبک بیان** — لحن و ریتم. با مثال از خود متن، نه با صفت کلی.
+
+**احساسات** — چه حسی را هدف گرفته و آیا واقعاً می‌سازد. اگر خنثی است، بگو خنثی.
+
+**CTA** — چه خواسته‌ای دارد. اگر هیچ خواسته‌ای نیست، \`null\` — «فالو کنید» را از خودت اضافه نکن.
+
+**کلمات کلیدی** — واژه‌هایی که **خود متن** به کار برده. مترادف اضافه نکن؛ ما داریم زبان این برند را یاد می‌گیریم، نه زبان درست را.
+
+**دلیل احتمالی عملکرد** — این همیشه \`hypothesis\` است، حتی اگر عددها روشن باشند.
+- اگر آمار نبود: فقط بگو چه چیزی در خود محتوا می‌توانست کار کند یا نکند، و \`basis: 'content_only'\`.
+- اگر آمار بود: به عدد اشاره کن ولی علیت را ادعا نکن. یک پست پربازدید ممکن است فقط زمان‌بندی خوبی داشته باشد.
+- اگر نمونه کم است یا مقایسه‌ای نداری، \`inconclusive\` بگذار. **آزمایش بی‌اعتبار، آزمایش شمرده نمی‌شود.**
+
+هر چیزی که از متن مستقیم درنیامده، \`hypothesis\` است. برای هر واقعیت، \`source\` بده:
+یک نقل‌قول **پیوسته** از همان متن، نه چند تکه‌ی چسبانده‌شده.
+`;
+};
+
+export const CONTENT_ITEM_SCHEMA = {
+  type: 'object',
+  required: ['topic', 'coreMessage', 'style', 'keywords', 'performance', 'confident'],
+  properties: {
+    topic:       { type: 'string' },
+    coreMessage: { type: 'string', description: 'ادعای مرکزی، نه خلاصه' },
+
+    hook: {
+      type: 'object',
+      required: ['present'],
+      properties: {
+        present: { type: 'boolean' },
+        text:    { type: ['string', 'null'], description: 'خود هوک، نقل مستقیم' },
+        kind:    { type: ['string', 'null'], description: 'سوالی · خبری · شوک · وعده · داستان' }
+      }
+    },
+
+    style: {
+      type: 'object',
+      required: ['description'],
+      properties: {
+        description: { type: 'string' },
+        evidence:    { type: 'array', items: { type: 'string' }, description: 'نقل‌قول پیوسته از متن' }
+      }
+    },
+
+    emotion: {
+      type: 'object',
+      required: ['target'],
+      properties: {
+        target:   { type: ['string', 'null'], description: 'null یعنی خنثی' },
+        delivers: { type: ['boolean', 'null'] },
+        note:     { type: ['string', 'null'] }
+      }
+    },
+
+    cta: {
+      type: ['object', 'null'],
+      description: 'null اگر هیچ خواسته‌ای در محتوا نیست — از خودت اضافه نکن',
+      properties: {
+        text:     { type: 'string' },
+        action:   { type: 'string', description: 'خرید · دایرکت · کامنت · سیو · لینک' },
+        explicit: { type: 'boolean' }
+      }
+    },
+
+    keywords: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'واژه‌های خود متن. مترادف اضافه نشود.'
+    },
+
+    performance: {
+      type: 'object',
+      required: ['status', 'basis'],
+      properties: {
+        status: { type: 'string', enum: ['hypothesis', 'inconclusive', 'describe_only'] },
+        basis:  { type: 'string', enum: ['content_only', 'metrics_present', 'compared_to_page'] },
+        why:    { type: ['string', 'null'], description: 'دلیل احتمالی — هرگز به‌عنوان واقعیت' },
+        againstWhat: { type: ['string', 'null'], description: 'با چه چیزی مقایسه شد' }
+      }
+    },
+
+    facts: {
+      type: 'array',
+      description: 'ادعاهایی که مستقیم از متن آمده‌اند',
+      items: {
+        type: 'object',
+        required: ['claim', 'source'],
+        properties: {
+          claim:  { type: 'string' },
+          source: { type: 'string', description: 'نقل‌قول پیوسته از متن' }
+        }
+      }
+    },
+
+    unknowns: {
+      type: 'array', items: { type: 'string' },
+      description: 'چیزهایی که چون خوانده نشده‌اند نمی‌دانیم — نه چیزهایی که نبوده‌اند'
+    },
+
+    confident: { type: 'number', description: '۰ تا ۱' }
+  }
+};

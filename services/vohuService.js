@@ -47,6 +47,8 @@ export async function callWithSchema({
   const t0 = Date.now();
 
   const client = await getClient();
+  // بدون سقف، یک تماس گیرکرده تا ده دقیقه کاربر را پشت اسپینر نگه می‌دارد
+  const timeoutMs = Number(process.env.VOHU_CALL_TIMEOUT_MS || 180000);
   const res = await client.messages.create({
     model,
     max_tokens: maxTokens,
@@ -57,7 +59,7 @@ export async function callWithSchema({
       input_schema: schema
     }],
     tool_choice: { type: 'tool', name: toolName }   // مدل مجبور است این را صدا بزند
-  });
+  }, { timeout: timeoutMs, maxRetries: 1 });
 
   const block = res.content.find(c => c.type === 'tool_use');
   if (!block) throw new Error('مدل خروجی ساختاریافته برنگرداند');

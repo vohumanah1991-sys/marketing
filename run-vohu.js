@@ -8,7 +8,7 @@
  * برای شروع از صفر:  node run-vohu.js <url> --fresh
  */
 
-import './lib/env.js';
+import './lib/env.js';   // باید اولین import باشد — .env را می‌خواند
 import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { runPipeline } from './lib/pipeline.js';
