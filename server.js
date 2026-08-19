@@ -56,7 +56,10 @@ app.post('/api/run', guard(async (req, res) => {
   const { url, note, fresh } = req.body;
   if (!url) return res.status(400).json({ error: 'آدرس لازم است' });
   let run = fresh ? await startRun({ url, note }) : await getRun(url);
-  if (!run.stages) run = await startRun({ url, note });
+  // loadRun برای اجرای نبوده یک قالب خالی برمی‌گرداند که stages دارد ولی input ندارد؛
+  // پس شرط قبلی هیچ‌وقت برقرار نمی‌شد و advance روی run.input.competitors می‌شکست.
+  if (!run.stages || !Object.keys(run.stages).length) run = await startRun({ url, note });
+  run.input = run.input || {};
   if (note && !run.note) run.note = note;
   res.json(view(await advance(run)));
 }));

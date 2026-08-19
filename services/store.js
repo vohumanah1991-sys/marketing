@@ -28,7 +28,7 @@ function slug(url) {
 
 export async function loadRun(url) {
   const file = path.join(DIR, `${slug(url)}.json`);
-  if (!existsSync(file)) return { url, stages: {}, createdAt: new Date().toISOString() };
+  if (!existsSync(file)) return { url, stages: {}, input: {}, createdAt: new Date().toISOString() };
   return JSON.parse(await readFile(file, 'utf8'));
 }
 

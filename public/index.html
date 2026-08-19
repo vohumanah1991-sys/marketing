@@ -112,8 +112,11 @@ function start(){
 function go(){
   let u = $('#u').value.trim(); if(!u) return;
   if(!/^https?:\/\//.test(u)) u = 'https://' + u;
+  // هر چه از فرم لازم است، قبل از spin خوانده شود —
+  // spin کل #m را بازنویسی می‌کند و ورودی‌ها دیگر در DOM نیستند.
+  const note = $('#n').value.trim();
   url = u; spin('صفحه را می‌خوانم و کسب‌وکار را می‌فهمم…');
-  api('/api/run', { url:u, note:$('#n').value.trim() });
+  api('/api/run', { url:u, note });
 }
 
 function competitors(){
