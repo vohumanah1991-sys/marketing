@@ -1,34 +1,57 @@
 # فرستادن روی گیت‌هاب
 
-مخزن آماده است — با یک کامیت. فقط باید مقصدش را بگویی.
+مخزن آماده است، با دو کامیت و remote از قبل تنظیم‌شده روی:
 
-## اگر مخزن تازه می‌خواهی
+```
+git@github.com:vohumanah1991-sys/marketing.git
+```
 
-روی گیت‌هاب یک مخزن **خالی** بساز (بدون README، بدون .gitignore، بدون لایسنس)
-— مثلاً به اسم `vohu` — بعد:
+## دستور
 
 ```bash
-unzip vohu-repo.zip && cd repo
-
-git remote add origin https://github.com/vohumanah1991-sys/vohu.git
+unzip vohu-repo.zip
+cd repo
 git push -u origin main
 ```
 
-## اگر می‌خواهی کنار Spark-saas بماند
+همین. `origin` از قبل تنظیم شده.
 
-می‌توانی به‌عنوان یک شاخه‌ی جدا بفرستی تا کد قدیمی دست‌نخورده بماند:
+## اگر SSH نداری
 
 ```bash
-unzip vohu-repo.zip && cd repo
-
-git remote add origin https://github.com/vohumanah1991-sys/Spark-saas.git
-git push -u origin main:vohu-architecture
+git remote set-url origin https://github.com/vohumanah1991-sys/marketing.git
+git push -u origin main
 ```
 
-بعد در گیت‌هاب شاخه‌ی `vohu-architecture` را می‌بینی، بدون اینکه `main` عوض شود.
+## اگر مخزن خالی نیست
 
-## نکته
+اگر موقع ساختن، README یا لایسنس اضافه کرده‌ای، اول یک بار بگیرش:
 
-`.gitignore` این‌ها را کنار گذاشته: `node_modules/` · `.vohu/` · `.env` · خروجی‌های موقت استخراج.
+```bash
+git pull --rebase origin main
+git push -u origin main
+```
 
-فایل `.env` در مخزن نیست — فقط `.env.example`. کلیدت هیچ‌جا نرفته.
+یا اگر می‌خواهی هرچه آنجاست جایگزین شود:
+
+```bash
+git push -u --force origin main
+```
+
+## بررسی قبل از فرستادن
+
+```bash
+git log --oneline          # باید دو کامیت باشد
+git ls-files | wc -l       # ۳۴ فایل
+git status                 # باید تمیز باشد
+```
+
+## چه چیزی نمی‌رود
+
+`.gitignore` این‌ها را کنار گذاشته:
+
+```
+node_modules/     .vohu/     .env     *.log     extraction-*.json
+```
+
+**فایل `.env` در مخزن نیست** — فقط `.env.example`. کلیدت هیچ‌جا نرفته.
