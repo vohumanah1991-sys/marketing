@@ -12,6 +12,7 @@ import { envFile } from './lib/env.js';   // باید اولین import باشد
 import express from 'express';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { check, timed, buildId } from './lib/selftest.js';
 import { startRun, getRun, advance, normalizeSource } from './lib/session.js';
 import { saveRun, storeDir } from './services/store.js';
 import { checkContent } from './lib/pipeline.js';
@@ -20,12 +21,25 @@ import { syncInstagram, loadState, resolveLimits } from './lib/igSync.js';
 import { analyzeItems } from './lib/igAnalyze.js';
 import { capabilities } from './services/media.js';
 import { apifyEnabled } from './services/apify.js';
+import { configuredProvider, activeEngine } from './services/vohuService.js';
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';   // روی سرور باید همه‌ی رابط‌ها باشد، نه فقط localhost
 const here = path.dirname(fileURLToPath(import.meta.url));
 const STARTED_AT = new Date().toISOString();
+
+/**
+ * کلیدی که **سرویس فعال** لازم دارد — نه همیشه کلید کلاد.
+ * با VOHU_PROVIDER=openai نبودن ANTHROPIC_API_KEY اصلاً عیب نیست؛
+ * هشدار دادن بابتش کاربر را دنبال کلیدی می‌فرستد که هیچ‌جا خوانده نمی‌شود.
+ */
+function activeKey() {
+  let provider = null;
+  try { provider = configuredProvider(); } catch { /* مقدار نامعتبر — selftest می‌گوید */ }
+  const name = provider === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY';
+  return { provider, name, set: Boolean(process.env[name]) };
+}
 
 app.use(express.json({ limit: '2mb' }));
 
@@ -287,18 +301,8 @@ markInterrupted().then(n => { if (n) console.log(`  ⚠ ${n} کار ناتمام
 // در مرورگر باز کن:  http://<آی‌پی>:3000/api/selftest
 // هیچ کلیدی در خروجی نیست — فقط «هست یا نیست».
 
-async function timed(name, fn, ms = 20000) {
-  const t0 = Date.now();
-  try {
-    const value = await Promise.race([
-      fn(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error(`بیش از ${ms / 1000}s طول کشید`)), ms))
-    ]);
-    return { name, ok: true, ms: Date.now() - t0, ...value };
-  } catch (e) {
-    return { name, ok: false, ms: Date.now() - t0, error: String(e.message).slice(0, 200) };
-  }
-}
+// check() و timed() در lib/selftest.js هستند تا خودشان هم زیر تست بروند —
+// قاعده‌شان یکی است: هر بررسی داخل try خودش، خطا به‌عنوان نتیجه‌ی همان بررسی.
 
 // نسخه‌ی در حال اجرا — برای تشخیص اینکه مرورگر نسخه‌ی کش‌شده نشان می‌دهد یا نه
 // ══ صفحه‌ی تشخیص، بدون جاوااسکریپت ═════════════════════════
@@ -351,19 +355,22 @@ app.post('/diag', guard(async (req, res) => {
     و مشکل از جاوااسکریپت صفحه‌ی اصلی است.</p>
     <pre>${JSON.stringify({
       دریافت_شد: site || '(خالی)',
-      مدل: process.env.VOHU_MODEL || null,
-      کلید_کلاد: Boolean(process.env.ANTHROPIC_API_KEY),
+      مدل: (() => { try { return activeEngine().model; } catch { return null; } })(),
+      سرویس: activeKey().provider,
+      کلید: `${activeKey().name}: ${activeKey().set ? 'هست' : 'نیست'}`,
       توکن_آپیفای: apifyEnabled(),
       ffmpeg: caps.ffmpeg, tesseract: caps.tesseract
     }, null, 2)}</pre>
     <p><a href="/diag">برگرد</a></p>`));
 }));
 
+// شناسه‌ی نسخه یک بار موقع بالا آمدن خوانده می‌شود، نه هر درخواست: کدی که
+// این پروسه اجرا می‌کند تا restart بعدی عوض نمی‌شود، حتی اگر HEAD وسط کار
+// جلو برود. فایل BUILD حذف شد — چرایش در lib/selftest.js نوشته است.
+const BUILD = buildId(here);
+
 app.get('/api/version', guard(async (_req, res) => {
-  const { readFile } = await import('node:fs/promises');
-  let build = 'نامعلوم';
-  try { build = (await readFile(path.join(here, 'BUILD'), 'utf8')).trim(); } catch {}
-  const { activeEngine } = await import('./services/vohuService.js');
+  const build = BUILD;
   let engine = null;
   try { engine = activeEngine(); } catch { /* VOHU_PROVIDER نامعتبر — selftest می‌گوید */ }
   res.json({ build, startedAt: STARTED_AT, model: engine?.model || null, provider: engine?.provider || null });
@@ -372,32 +379,70 @@ app.get('/api/version', guard(async (_req, res) => {
 app.get('/api/selftest', guard(async (_req, res) => {
   const checks = [];
 
-  checks.push({ name: 'فایل .env', ok: Boolean(envFile), detail: envFile ? 'خوانده شد' : 'پیدا نشد' });
-  checks.push({ name: 'ANTHROPIC_API_KEY', ok: Boolean(process.env.ANTHROPIC_API_KEY),
-                detail: process.env.ANTHROPIC_API_KEY ? 'تعریف شده' : 'تعریف نشده' });
-  checks.push({ name: 'VOHU_MODEL', ok: Boolean(process.env.VOHU_MODEL),
-                detail: process.env.VOHU_MODEL || 'تعریف نشده' });
-  checks.push({ name: 'APIFY_TOKEN', ok: apifyEnabled(),
-                detail: apifyEnabled() ? 'تعریف شده' : 'تعریف نشده — اینستاگرام خاموش است' });
+  // ⚠ هر بررسی داخل try خودش است — check() برای همگام‌ها، timed() برای
+  // آن‌هایی که به بیرون زنگ می‌زنند. یک بررسی که می‌ترکد باید یک خط قرمز
+  // بشود، نه اینکه بقیه را هم با خودش ببرد.
+  //
+  // مقدارهای مشترک (کلید، ماژول OpenAI، ابزارهای رسانه) یک بار و با احتیاط
+  // گرفته می‌شوند؛ خطاشان نگه داشته می‌شود و فقط داخل همان بررسی‌هایی که به
+  // آن نیاز دارند بالا می‌آید.
+
+  checks.push(check('فایل .env', () =>
+    ({ ok: Boolean(envFile), detail: envFile ? 'خوانده شد' : 'پیدا نشد' })));
+
+  // ⚠ فقط کلید و مدلِ سرویسِ فعال «لازم» است. آن یکی اگر نباشد هم چیزی خراب
+  // نیست — قرمز کردنش یعنی فرستادن کاربر دنبال کلیدی که خوانده نمی‌شود.
+  let key = null, keyErr = null;
+  try { key = activeKey(); } catch (e) { keyErr = String(e?.message || e); }
+  const needKey = () => { if (keyErr) throw new Error(keyErr); return key; };
+  // اگر خود activeKey شکسته باشد، محتاطانه فرض می‌کنیم کلاد لازم است
+  const needAnthropic = key ? key.provider !== 'openai' : true;
+
+  checks.push(check('ANTHROPIC_API_KEY', () => ({
+    ok: needAnthropic ? needKey().set : true,
+    detail: process.env.ANTHROPIC_API_KEY
+      ? 'تعریف شده' + (needAnthropic ? '' : ' — ولی سرویس فعال openai است، خوانده نمی‌شود')
+      : (needAnthropic ? 'تعریف نشده' : 'تعریف نشده — لازم هم نیست، سرویس فعال openai است') })));
+  checks.push(check('VOHU_MODEL', () => ({
+    ok: needAnthropic ? Boolean(process.env.VOHU_MODEL) : true,
+    detail: process.env.VOHU_MODEL
+      || (needAnthropic ? 'تعریف نشده' : 'تعریف نشده — با openai مدل از OPENAI_MODEL می‌آید') })));
+  checks.push(check('APIFY_TOKEN', () => ({
+    ok: apifyEnabled(), detail: apifyEnabled() ? 'تعریف شده' : 'تعریف نشده — اینستاگرام خاموش است' })));
 
   // کدام سرویس؟ انتخاب صریح است، نه خودکار — و اگر مقدارش غلط باشد اینجا لو می‌رود
-  const { openaiEnabled, openaiModel, openaiBase } = await import('./services/openai.js');
-  const { activeEngine } = await import('./services/vohuService.js');
+  let oa = null, oaErr = null;
+  try { oa = await import('./services/openai.js'); } catch (e) { oaErr = String(e?.message || e); }
+  const needOA = () => { if (oaErr) throw new Error(oaErr); return oa; };
+
   let engine = null, engineErr = null;
   try { engine = activeEngine(); } catch (e) { engineErr = e.message; }
-  checks.push({ name: 'VOHU_PROVIDER', ok: Boolean(engine),
-                detail: engine ? `${engine.provider} · مدل ${engine.model || 'تعریف نشده'}` : engineErr });
-  checks.push({ name: 'OPENAI_API_KEY', ok: true,
-                detail: openaiEnabled()
-                  ? `تعریف شده · ${openaiBase()}`
-                  : 'تعریف نشده' + (engine?.provider === 'openai' ? ' — ولی VOHU_PROVIDER=openai است!' : '') });
+  checks.push(check('VOHU_PROVIDER', () => ({
+    ok: Boolean(engine),
+    detail: engine ? `${engine.provider} · مدل ${engine.model || 'تعریف نشده'}` : engineErr })));
+  checks.push(check('OPENAI_API_KEY', () => {
+    const { openaiEnabled, openaiBase } = needOA();
+    return { ok: engine?.provider === 'openai' ? openaiEnabled() : true,
+             detail: openaiEnabled()
+               ? `تعریف شده · ${openaiBase()}`
+               : 'تعریف نشده' + (engine?.provider === 'openai' ? ' — ولی VOHU_PROVIDER=openai است!' : '') };
+  }));
 
-  const caps = await capabilities();
-  checks.push({ name: 'ffmpeg', ok: caps.ffmpeg, detail: caps.ffmpeg ? 'هست' : 'نصب نیست' });
-  checks.push({ name: 'tesseract', ok: caps.tesseract,
-                detail: caps.tesseract ? `زبان‌ها: ${caps.langs.join(', ')}` : 'نصب نیست' });
-  checks.push({ name: 'OCR فارسی', ok: caps.ocrPersian,
-                detail: caps.ocrPersian ? 'هست' : 'apt install tesseract-ocr-fas' });
+  let caps = null, capsErr = null;
+  try { caps = await capabilities(); } catch (e) { capsErr = String(e?.message || e); }
+  const needCaps = () => { if (capsErr) throw new Error(capsErr); return caps; };
+  checks.push(check('ffmpeg', () => {
+    const c = needCaps();
+    return { ok: c.ffmpeg, detail: c.ffmpeg ? 'هست' : 'نصب نیست' };
+  }));
+  checks.push(check('tesseract', () => {
+    const c = needCaps();
+    return { ok: c.tesseract, detail: c.tesseract ? `زبان‌ها: ${c.langs.join(', ')}` : 'نصب نیست' };
+  }));
+  checks.push(check('OCR فارسی', () => {
+    const c = needCaps();
+    return { ok: c.ocrPersian, detail: c.ocrPersian ? 'هست' : 'apt install tesseract-ocr-fas' };
+  }));
 
   // اینترنت بیرون
   checks.push(await timed('اینترنت (example.com)', async () => {
@@ -405,15 +450,19 @@ app.get('/api/selftest', guard(async (_req, res) => {
     return { detail: `HTTP ${r.status}` };
   }, 15000));
 
-  // دسترسی به API کلاد — بدون خرج‌کردن توکن
-  checks.push(await timed('دسترسی به api.anthropic.com', async () => {
-    const r = await fetch('https://api.anthropic.com/v1/models', {
-      headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY || '',
-                 'anthropic-version': '2023-06-01' }
-    });
-    if (r.status === 401) return { detail: 'رسید ولی کلید پذیرفته نشد (۴۰۱)', ok: false };
-    return { detail: `HTTP ${r.status}` };
-  }, 20000));
+  // دسترسی به API کلاد — بدون خرج‌کردن توکن.
+  // با سرویس فعالِ openai اصلاً زده نمی‌شود: یک ۴۰۱ قرمز از سروری که
+  // این اجرا هرگز با آن حرف نمی‌زند، فقط گمراه‌کننده است.
+  if (needAnthropic) {
+    checks.push(await timed('دسترسی به api.anthropic.com', async () => {
+      const r = await fetch('https://api.anthropic.com/v1/models', {
+        headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY || '',
+                   'anthropic-version': '2023-06-01' }
+      });
+      if (r.status === 401) return { detail: 'رسید ولی کلید پذیرفته نشد (۴۰۱)', ok: false };
+      return { detail: `HTTP ${r.status}` };
+    }, 20000));
+  }
 
   // یک تماس واقعی و کوچک با مدل
   checks.push(await timed('یک تماس واقعی با مدل', async () => {
@@ -426,8 +475,12 @@ app.get('/api/selftest', guard(async (_req, res) => {
     return { detail: `مدل جواب داد: n=${out.data?.n} · ${out.meta?.model}` };
   }, 60000));
 
-  if (openaiEnabled()) {
+  if (oa?.openaiEnabled()) {
     checks.push(await timed('دسترسی به OpenAI', async () => {
+      // openaiModel هم از همین ماژول می‌آید — قبلاً import نشده بود و این
+      // بررسی همیشه با «تعریف نشده» می‌ترکید.
+      const { openaiBase, openaiModel } = needOA();
+      const model = openaiModel();
       const r = await fetch(`${openaiBase()}/models`,
         { headers: { authorization: `Bearer ${process.env.OPENAI_API_KEY}` } });
       if (r.status === 401) return { detail: 'رسید ولی کلید پذیرفته نشد (۴۰۱)', ok: false };
@@ -435,10 +488,10 @@ app.get('/api/selftest', guard(async (_req, res) => {
       // مدل تعریف‌شده واقعاً وجود دارد؟ حدس نزن، از خودشان بپرس.
       const body = await r.json().catch(() => null);
       const ids = (body?.data || []).map(m => m.id);
-      const has = ids.includes(openaiModel());
+      const has = ids.includes(model);
       return { ok: has,
-               detail: has ? `توکن معتبر است · ${openaiModel()} موجود است`
-                           : `توکن معتبر است ولی مدل «${openaiModel()}» در فهرست نیست` };
+               detail: has ? `توکن معتبر است · ${model} موجود است`
+                           : `توکن معتبر است ولی مدل «${model}» در فهرست نیست` };
     }, 20000));
   }
 
@@ -470,11 +523,20 @@ const server = app.listen(PORT, HOST, () => {
   if (!envFile) {
     console.log(`  ⚠ فایل .env پیدا نشد. انتظار می‌رفت اینجا باشد:`);
     console.log(`     ${path.join(here, '.env')}\n`);
-  } else if (!process.env.ANTHROPIC_API_KEY) {
-    console.log(`  ⚠ ${envFile} خوانده شد ولی ANTHROPIC_API_KEY داخلش نبود.`);
-    console.log(`     کلیدهایی که پیدا شد: ${Object.keys(process.env).filter(k => k.startsWith('VOHU_') || k === 'ANTHROPIC_API_KEY').join(', ') || '(هیچ)'}\n`);
   } else {
-    console.log(`  ✓ کلید خوانده شد · مدل: ${process.env.VOHU_MODEL || '(VOHU_MODEL تعریف نشده)'}\n`);
+    // کلیدِ سرویسِ فعال. با VOHU_PROVIDER=openai دنبال ANTHROPIC_API_KEY نمی‌گردیم.
+    const key = activeKey();
+    let engine = null;
+    try { engine = activeEngine(); } catch (e) { console.log(`  ⚠ ${e.message}\n`); }
+
+    if (!key.set) {
+      console.log(`  ⚠ ${envFile} خوانده شد ولی ${key.name} داخلش نبود.`);
+      console.log(`     سرویس فعال: ${key.provider || '؟'} — همین کلید را لازم دارد.`);
+      console.log(`     کلیدهایی که پیدا شد: ${Object.keys(process.env).filter(k => k.startsWith('VOHU_') || k === 'ANTHROPIC_API_KEY' || k === 'OPENAI_API_KEY' || k === 'APIFY_TOKEN').join(', ') || '(هیچ)'}\n`);
+    } else if (engine) {
+      const modelVar = engine.provider === 'openai' ? 'OPENAI_MODEL' : 'VOHU_MODEL';
+      console.log(`  ✓ ${key.name} خوانده شد · سرویس: ${engine.provider} · مدل: ${engine.model || `(${modelVar} تعریف نشده)`}\n`);
+    }
   }
 });
 
