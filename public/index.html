@@ -249,6 +249,18 @@ function freshStart(){
   api('/api/run', { fresh:true, url });
 }
 
+/**
+ * پیام خطای یک پنل — همیشه با دست‌کم یک راه ادامه.
+ *
+ * همان قاعده‌ی صفحه‌ی خطای اصلی، برای پنل‌های کوچک‌تر: پیامی که فقط
+ * می‌گوید چه شد و کاری برای کردن نمی‌گذارد، کاربر را همان‌جا رها می‌کند.
+ * فراخوانِ دکمه رشته‌ای ثابت در خود کد است، نه چیزی که از سرور آمده باشد.
+ */
+function errBox(msg, label, call){
+  return `<div class="err">${esc(msg)}</div>
+    <button style="margin-top:10px" onclick="${call}">${esc(label)}</button>`;
+}
+
 // بررسی اتصال — تا لازم نباشد کاربر با curl ور برود
 async function checkConn(){
   const box = $('#pg') || M;
@@ -421,7 +433,7 @@ async function igStart(){
     if (j.error) throw new Error(j.error);
     igJob = j.jobId;
     igPoll();
-  }catch(e){ $('#ig_out').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+  }catch(e){ $('#ig_out').innerHTML = errBox(e.message, 'دوباره امتحان کن', 'igStart()'); }
 }
 
 function igPoll(){
@@ -435,9 +447,13 @@ function igPoll(){
       box.innerHTML = `<div class="card"><b>${esc(faStatus(j.status))}</b>
         <div class="sm">${esc(p.note||'')} ${bar}</div>
         ${j.error?`<div class="err" style="margin-top:8px">${esc(j.error)}</div>`:''}
+        ${['failed','interrupted'].includes(j.status)
+          ? '<button style="margin-top:10px" onclick="igStart()">دوباره امتحان کن</button>' : ''}
         ${j.status==='done'?igResult(j.result):''}</div>`;
       if (['done','failed','interrupted'].includes(j.status)) clearInterval(igTimer);
-    }catch(e){ clearInterval(igTimer); box.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+    }catch(e){ clearInterval(igTimer);
+      // پرسیدن از کار قطع شد — خودِ کار ممکن است هنوز روی سرور زنده باشد
+      box.innerHTML = errBox(e.message, 'دوباره بپرس', 'igPoll()'); }
   }, 2000);
 }
 
@@ -646,7 +662,7 @@ async function check(){
       bad.map(c=>`<div class="cl"><span class="tag ${c.status==='blocked'?'t-w':'t-h'}">${
         c.status==='blocked'?'بسته':c.status==='needsRecheck'?'کهنه':'تأیید تو لازم'}</span> ${esc(c.text)}
         ${c.rewrite?`<div class="sm">پیشنهاد: ${esc(c.rewrite)}</div>`:''}</div>`).join('');
-  }catch(e){ $('#cr2').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+  }catch(e){ $('#cr2').innerHTML = errBox(e.message, 'دوباره بررسی کن', 'check()'); }
   finally{ busy = false; }
 }
 
