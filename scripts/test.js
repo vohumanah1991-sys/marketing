@@ -790,6 +790,13 @@ t('شماره‌ی نسخه از git می‌آید، نه از فایلی که �
   const root = fileURLToPath(new URL('..', import.meta.url));
 
   ok(/^[0-9a-f]{7,}/.test(buildId(root) || ''), `باید هش کوتاه git باشد: ${buildId(root)}`);
+  // بدون $HOME (مثل systemd) باید همان جواب بیاید — وگرنه یک فایل ردیابی‌نشده
+  // که فقط ignore سراسریِ کاربر پنهانش می‌کند، نسخه را «تغییریافته» نشان می‌دهد
+  const { execFileSync } = await import('node:child_process');
+  const bare = execFileSync(process.execPath,
+    ['-e', `import('${new URL('../lib/selftest.js', import.meta.url).href}').then(m => console.log(m.buildId(${JSON.stringify(root)})))`],
+    { env: {}, encoding: 'utf8' }).trim();
+  eq(bare, buildId(root), 'شناسه‌ی نسخه نباید به محیط بستگی داشته باشد');
   eq(buildId('/'), null, 'بیرون از مخزن، «نمی‌دانم» جواب درست است — نه شماره‌ی غلط');
   ok(!existsSync(new URL('../BUILD', import.meta.url)), 'فایل BUILD نباید برگردد — همیشه عقب می‌ماند');
 
