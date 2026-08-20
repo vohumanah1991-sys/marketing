@@ -1,0 +1,30 @@
+[
+  {
+    "shortCode": "DryReel001",
+    "type": "Video",
+    "productType": "clips",
+    "url": "https://www.instagram.com/reel/DryReel001/",
+    "ownerUsername": "dryrun",
+    "timestamp": "2026-08-10T09:00:00.000Z",
+    "caption": "نمونه‌ی خشک — ریلز اول. برای تست جریان بدون تماس با Apify.",
+    "likesCount": 412,
+    "commentsCount": 27,
+    "videoPlayCount": 9130,
+    "videoDuration": 31.4,
+    "videoUrl": "https://example.invalid/dry-reel-001.mp4"
+  },
+  {
+    "shortCode": "DryReel002",
+    "type": "Video",
+    "productType": "clips",
+    "url": "https://www.instagram.com/reel/DryReel002/",
+    "ownerUsername": "dryrun",
+    "timestamp": "2026-08-04T18:30:00.000Z",
+    "caption": "نمونه‌ی خشک — ریلز دوم.",
+    "likesCount": 188,
+    "commentsCount": 9,
+    "videoPlayCount": 4020,
+    "videoDuration": 18.0,
+    "videoUrl": "https://example.invalid/dry-reel-002.mp4"
+  }
+]

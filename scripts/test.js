@@ -13,7 +13,12 @@ import { sourceList, classify, whyBlocked, normalizeSource } from '../lib/sessio
 import { apifyEnabled, classifyInstagramUrl, redact } from '../services/apify.js';
 import { itemsToText, contentType, extractTags, readTranscript, buildContentItem, itemToText } from '../lib/instagram.js';
 import { resolveLimits } from '../lib/igSync.js';
+import { loadRun } from '../services/store.js';
+import { costOf } from '../lib/session.js';
 import { isRealText, textResult, dedupeTexts } from '../services/media.js';
+import * as VS from '../services/vohuService.js';
+import { faModelError, faModelHint, configuredProvider, activeEngine, callWithSchema } from '../services/vohuService.js';
+import { openaiEnabled, openaiModel, openaiBase, redactOpenAI, faOpenAIError } from '../services/openai.js';
 
 let pass = 0, fail = 0;
 const failures = [];
@@ -51,6 +56,37 @@ for (const p of prompts) t(`${p} با ورودی خالی خطا نمی‌دهد
   ok(typeof s === 'string' && s.length > 200, 'خروجی خالی یا خیلی کوتاه');
   ok(!s.includes('undefined'), 'رشته‌ی undefined در پرامپت نشت کرده');
   ok(!/\$\{/.test(s), 'قالب جایگزین‌نشده در خروجی مانده');
+});
+
+// مهرِ تولید در داده می‌ماند ولی هرگز وارد پرامپت نمی‌شود — قاعده‌ی
+// «هر ورودی باید حذفش خروجی را عوض کند». مهر هیچ تصمیمی را عوض نمی‌کند.
+const stampAll = v => {
+  if (Array.isArray(v)) return v.map(stampAll);
+  if (v && typeof v === 'object') {
+    const o = { producedBy: { provider: 'openai', model: 'gpt-قلابی', at: '2026-08-20T00:00:00Z' } };
+    for (const [k, x] of Object.entries(v)) o[k] = stampAll(x);
+    return o;
+  }
+  return v;
+};
+const STAMPED = stampAll({ ...STUB, knowledge: { brand: {}, products: [{ name: 'x' }], learningMemory: {} },
+                           market: {}, contentAnalysis: { capacities: [], topics: {}, flatSpots: [] },
+                           card: { cells: {} }, strength: { neverAllowed: [{ x: 1 }] },
+                           occasions: [{ name: 'نوروز' }], posts: [{ caption: 'x' }] });
+
+for (const p of prompts) t(`${p} مهر تولید را وارد پرامپت نمی‌کند`, () => {
+  const out = V[p](STAMPED);
+  ok(!out.includes('producedBy'), 'رشته‌ی producedBy در پرامپت نشت کرده');
+  ok(!out.includes('gpt-قلابی'), 'نام مدلِ سازنده در پرامپت نشت کرده');
+});
+
+t('knowledgeFor در هر برشی مهر را می‌اندازد', () => {
+  const k = stampAll({ business: {}, brand: {}, learningMemory: { campaignHistory: [{ target: 'x' }] },
+                       productUsability: [{ product: 'p', usable: 'yes' }] });
+  for (const stage of ['questions', 'market', 'content', 'strategy', 'campaign', 'evidence', 'هیچ']) {
+    const cut = JSON.stringify(V.knowledgeFor(stage, k));
+    ok(!cut.includes('producedBy'), `برش ${stage} مهر را نگه داشته`);
+  }
 });
 
 for (const s of schemas) t(`${s} ساختار معتبر دارد`, () => {
@@ -434,6 +470,249 @@ t('اسم هیچ مدلی در رابط کاربری هاردکد نشده', asy
   for (const m of ['Opus', 'opus', 'Sonnet', 'sonnet', 'Haiku', 'claude-']) {
     ok(!ui.includes(m), `اسم مدل «${m}» در رابط کاربری نوشته شده — باید از سرور بیاید`);
   }
+});
+
+// ═══ رابط کاربری — دو باگی که ساعت‌ها وقت گرفتند ═══
+t('هیچ ورودی‌ای مستقیم خوانده نمی‌شود — همه از val() رد می‌شوند', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ui = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  const direct = ui.match(/\$\('#[A-Za-z0-9_]+'\)\.value/g) || [];
+  eq(direct.length, 0,
+     `خواندن مستقیم: ${direct.join(', ')} — spin() صفحه را پاک می‌کند و بعدش null.value می‌شود`);
+  ok(/function val\(id\)/.test(ui), 'تابع val باید وجود داشته باشد');
+});
+t('هیچ <a> رویداد inline ندارد', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ui = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  const bad = ui.match(/<a\b[^>]*\son[a-z]+=/gi) || [];
+  eq(bad.length, 0,
+     `<a> با onclick: خاصیت‌های خود عنصر (مثل ping و target) تابع سراسری هم‌نام را می‌پوشانند`);
+});
+t('نام هیچ تابع سراسری با خاصیت‌های عناصر تداخل ندارد', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ui = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  const names = [...ui.matchAll(/^(?:async )?function ([a-zA-Z0-9_]+)\(/gm)].map(m => m[1]);
+  const dom = ['ping','target','rel','download','href','name','type','form','title','id','value','text','media'];
+  const clash = names.filter(n => dom.includes(n));
+  eq(clash.length, 0, `تداخل با خاصیت DOM: ${clash.join(', ')}`);
+});
+
+t('اجرای تازه همیشه شکل حداقلی دارد — stages و input', async () => {
+  process.env.VOHU_STORE_DIR = '/tmp/vohu-test-store-' + Math.random().toString(36).slice(2);
+  const r = await loadRun('https://never-seen-' + Math.random().toString(36).slice(2) + '.com');
+  ok(r.stages && typeof r.stages === 'object', 'stages باید باشد');
+  ok(r.input  && typeof r.input  === 'object', 'input باید باشد — وگرنه اولین نوشتن منفجر می‌شود');
+  ok(r.url, 'url باید باشد');
+  // همان چیزی که در سرور می‌شکست
+  r.input.sources = ['x'];
+  eq(r.input.sources.length, 1);
+});
+
+
+// ═══ خطای مدل — کاربر باید بفهمد چه شد، نه اینکه JSON انگلیسی ببیند ═══
+//
+// این همان چیزی است که در اجرای واقعی دیده شد: «✗ کارت استراتژی — 400
+// {"type":"error","error":{...}}». متن خام فقط جای لاگ سرور است.
+
+const apiErr = (status, message, type = 'invalid_request_error') =>
+  Object.assign(new Error(`${status} ${JSON.stringify({ type: 'error', error: { type, message } })}`),
+    { status, error: { type: 'error', error: { type, message } } });
+
+const CREDIT = 'Your credit balance is too low to access the Anthropic API.';
+
+t('پیام خطای مدل هیچ‌وقت بلوک JSON خام نیست', () => {
+  const cases = [
+    apiErr(400, CREDIT), apiErr(401, 'invalid x-api-key'), apiErr(403, 'no access'),
+    apiErr(404, 'model not found'), apiErr(413, 'too large'), apiErr(429, 'rate limit'),
+    apiErr(500, 'internal'), apiErr(529, 'overloaded')
+  ];
+  for (const e of cases) {
+    const m = faModelError(e);
+    ok(!m.includes('{"type"'), `JSON خام نشت کرد: ${m}`);
+    ok(!/^\d{3}\s/.test(m), `پیام با کد خام شروع شده: ${m}`);
+    ok(/[\u0600-\u06FF]/.test(m), `پیام فارسی نیست: ${m}`);
+  }
+});
+
+t('تمام‌شدن اعتبار با جمله‌ی خودش گفته می‌شود', () => {
+  const m = faModelError(apiErr(400, CREDIT));
+  ok(m.includes('اعتبار'), m);
+  ok(!/credit balance/i.test(m), 'متن انگلیسی سرویس به کاربر نشان داده شد');
+});
+
+t('۴۰۱ کلید را نشان می‌دهد، ۴۲۹ و ۵۲۹ فرق دارند', () => {
+  ok(faModelError(apiErr(401, 'x')).includes('ANTHROPIC_API_KEY'));
+  ok(faModelError(apiErr(429, 'x')).includes('نرخ'));
+  ok(faModelError(apiErr(529, 'x')).includes('شلوغ'));
+  ok(faModelError(apiErr(429, 'x')) !== faModelError(apiErr(529, 'x')), 'دو خطای متفاوت یک پیام دارند');
+});
+
+t('۴۰۴ نام مدل خواسته‌شده را می‌گوید', () => {
+  ok(faModelError(apiErr(404, 'not found'), { model: 'claude-x' }).includes('claude-x'));
+});
+
+t('مهلت و قطعی شبکه کد HTTP ندارند ولی پیام دارند', () => {
+  class APIConnectionTimeoutError extends Error {}
+  class APIConnectionError extends Error {}
+  const to = faModelError(new APIConnectionTimeoutError('Request timed out.'), { timeoutMs: 180000 });
+  ok(to.includes('180s'), to);
+  ok(faModelError(new APIConnectionError('Connection error.')).includes('api.anthropic.com'));
+});
+
+t('راهنمای «حالا چه کار کنم» فقط جایی است که حرفی برای گفتن هست', () => {
+  ok(faModelHint(apiErr(400, CREDIT)).includes('شارژ'));
+  ok(faModelHint(apiErr(529, 'x')).includes('Anthropic'));
+  eq(faModelHint(apiErr(400, 'something else')), null, 'برای خطای نامعلوم راهنمای ساختگی نمی‌دهیم');
+});
+
+t('حالت خشک هیچ‌وقت وارد مسیر خطای مدل نمی‌شود', () => {
+  ok(faModelError({}) === 'خطای نامعلوم در تماس با مدل', 'خطای بی‌شکل هم پیام دارد');
+});
+
+
+// ═══ انتخاب سرویس — یک اجرا، یک سرویس ═══
+//
+// قاعده‌ای که نباید بشکند: هیچ تعویضی وسط کار. اگر سرویس انتخاب‌شده جواب
+// نداد، اجرا شکست می‌خورد و می‌گوید چرا — نه اینکه نیمه‌کاره با مدل دیگری
+// تمام شود. کارت استراتژیِ نصفه‌نصفه یک شاهد یکدست نیست (قاعده‌ی ۴).
+
+const withEnv = (vars, fn) => {
+  const old = {};
+  for (const [k, v] of Object.entries(vars)) {
+    old[k] = process.env[k];
+    if (v === null) delete process.env[k]; else process.env[k] = v;
+  }
+  // برگرداندن محیط باید بعد از تمام‌شدن کار باشد، نه بعد از برگشتن promise
+  const restore = () => { for (const [k, v] of Object.entries(old)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } };
+  let r;
+  try { r = fn(); } catch (e) { restore(); throw e; }
+  if (r && typeof r.then === 'function') return r.then(v => { restore(); return v; }, e => { restore(); throw e; });
+  restore();
+  return r;
+};
+
+t('پیش‌فرض anthropic است', () => {
+  withEnv({ VOHU_PROVIDER: null }, () => eq(configuredProvider(), 'anthropic'));
+});
+
+t('VOHU_PROVIDER=openai سرویس و مدل را عوض می‌کند', () => {
+  withEnv({ VOHU_PROVIDER: 'openai', OPENAI_MODEL: 'gpt-test' }, () => {
+    eq(configuredProvider(), 'openai');
+    eq(activeEngine().model, 'gpt-test', 'مدل باید از OPENAI_MODEL بیاید نه VOHU_MODEL');
+  });
+});
+
+t('مقدار نامعتبر VOHU_PROVIDER خطاست، نه پیش‌فرض بی‌صدا', () => {
+  withEnv({ VOHU_PROVIDER: 'gemini' }, () => {
+    let msg = null;
+    try { configuredProvider(); } catch (e) { msg = e.message; }
+    ok(msg && msg.includes('gemini'), 'باید صریح رد کند');
+  });
+});
+
+t('منطق جایگزینی خودکار دیگر وجود ندارد', () => {
+  ok(!('shouldFallback' in VS), 'shouldFallback باید حذف شده باشد');
+  eq(typeof VS.activeEngine, 'function', 'به‌جایش انتخاب صریح آمده');
+});
+
+t('اجرا وسط کار سرویس عوض نمی‌کند — صریح می‌ایستد', async () => {
+  await withEnv({ VOHU_PROVIDER: 'openai', VOHU_DRY_RUN: null, OPENAI_API_KEY: 'sk-test' }, async () => {
+    let err = null;
+    try {
+      await callWithSchema({ prompt: 'x', schema: { type: 'object', required: [], properties: {} },
+                             toolName: 'x', engine: { provider: 'anthropic', model: 'claude-sonnet-5' } });
+    } catch (e) { err = e; }
+    ok(err, 'باید خطا بدهد، نه اینکه با سرویس تازه ادامه دهد');
+    ok(err.message.includes('anthropic') && err.message.includes('openai'), err.message);
+    ok(err.hint && err.hint.includes('تازه'), 'باید بگوید اجرای تازه لازم است');
+  });
+});
+
+t('اجرا وسط کار مدل هم عوض نمی‌کند — همان‌طور که سرویس', async () => {
+  await withEnv({ VOHU_PROVIDER: 'anthropic', VOHU_MODEL: 'claude-sonnet-5', VOHU_DRY_RUN: null }, async () => {
+    let err = null;
+    try {
+      await callWithSchema({ prompt: 'x', schema: { type: 'object', required: [], properties: {} },
+                             toolName: 'x', engine: { provider: 'anthropic', model: 'claude-opus-5' } });
+    } catch (e) { err = e; }
+    ok(err, 'باید خطا بدهد، نه اینکه با مدل تازه ادامه دهد');
+    ok(err.message.includes('claude-opus-5') && err.message.includes('VOHU_MODEL'), err.message);
+    ok(err.hint.includes('یادگیری'), 'باید بگوید چرا: مقایسه‌ی دوربه‌دور و حافظه‌ی یادگیری');
+  });
+});
+
+t('قفل مدل برای openai هم هست، با نام متغیر خودش', async () => {
+  await withEnv({ VOHU_PROVIDER: 'openai', OPENAI_MODEL: 'gpt-4.1', OPENAI_API_KEY: 'sk-t', VOHU_DRY_RUN: null }, async () => {
+    let err = null;
+    try {
+      await callWithSchema({ prompt: 'x', schema: { type: 'object', required: [], properties: {} },
+                             toolName: 'x', engine: { provider: 'openai', model: 'gpt-قدیمی' } });
+    } catch (e) { err = e; }
+    ok(err && err.message.includes('OPENAI_MODEL'), err?.message);
+  });
+});
+
+t('VOHU_PROVIDER=openai بدون کلید، صریح می‌ایستد', async () => {
+  await withEnv({ VOHU_PROVIDER: 'openai', OPENAI_API_KEY: null, VOHU_DRY_RUN: null }, async () => {
+    let err = null;
+    try { await callWithSchema({ prompt: 'x', schema: { type: 'object', required: [], properties: {} }, toolName: 'x' }); }
+    catch (e) { err = e; }
+    ok(err && err.message.includes('OPENAI_API_KEY'), err?.message);
+  });
+});
+
+t('هر خروجی مهر سازنده‌اش را می‌گیرد (producedBy)', async () => {
+  await withEnv({ VOHU_DRY_RUN: '1', VOHU_FIXTURES: './fixtures' }, async () => {
+    const { data, meta } = await callWithSchema({
+      prompt: 'x', schema: { type: 'object', required: [], properties: {} }, toolName: 'هیچ‌فایلی' });
+    ok(data.producedBy, 'producedBy باید روی خروجی بنشیند');
+    eq(data.producedBy.provider, meta.provider);
+    eq(data.producedBy.model, meta.model);
+    ok(data.producedBy.at, 'تاریخ ساخت باید باشد');
+  });
+});
+
+t('راهنمای خطا دیگر وعده‌ی جایگزینی خودکار نمی‌دهد', () => {
+  const h = faModelHint(apiErr(400, CREDIT)) || '';
+  ok(!h.includes('خودکار'), `راهنما هنوز از جایگزینی خودکار حرف می‌زند: ${h}`);
+});
+
+// ═══ لایه‌ی OpenAI — مانده، ولی فقط «چطور حرف بزنیم» ═══
+
+t('آدرس و مدل OpenAI از .env می‌آیند، با پیش‌فرض سالم', () => {
+  withEnv({ OPENAI_BASE_URL: null, OPENAI_MODEL: null }, () => {
+    eq(openaiBase(), 'https://api.openai.com/v1');
+    ok(openaiModel().length > 0, 'مدل پیش‌فرض باید باشد');
+  });
+  withEnv({ OPENAI_BASE_URL: 'https://gateway.example.com/v1/' }, () =>
+    eq(openaiBase(), 'https://gateway.example.com/v1', 'اسلش آخر باید برداشته شود'));
+});
+
+t('کلید OpenAI هرگز در متن خطا یا لاگ نمی‌ماند', () => {
+  const leak = 'auth failed for sk-proj-ABCdef1234567890 with Bearer sk-abc123456789';
+  const clean = redactOpenAI(leak);
+  ok(!clean.includes('sk-proj-ABCdef1234567890'), `کلید نشت کرد: ${clean}`);
+  ok(!clean.includes('sk-abc123456789'), `کلید نشت کرد: ${clean}`);
+  ok(!faOpenAIError(400, { error: { message: leak } }).includes('sk-proj-ABC'), 'کلید در پیام خطا ماند');
+});
+
+t('خطای OpenAI هم فارسی است، نه JSON', () => {
+  const cases = [
+    faOpenAIError(401, { error: { message: 'Incorrect API key' } }),
+    faOpenAIError(429, { error: { message: 'quota', code: 'insufficient_quota' } }),
+    faOpenAIError(500, { error: { message: 'server error' } }),
+    faOpenAIError('timeout', 'x', { timeoutMs: 180000 }),
+    faOpenAIError('network', 'x')
+  ];
+  for (const m of cases) {
+    ok(/[\u0600-\u06FF]/.test(m), `فارسی نیست: ${m}`);
+    ok(!m.includes('{"'), `JSON خام نشت کرد: ${m}`);
+  }
+});
+
+t('مدل OpenAI قیمت ساختگی نمی‌گیرد', () => {
+  eq(costOf('gpt-4.1', 1000, 1000), null, 'قیمت ناشناخته باید null بماند، نه صفر');
+  ok(costOf('claude-sonnet-5', 1e6, 0) > 0, 'قیمت مدل شناخته‌شده باید حساب شود');
 });
 
 // ═══ گزارش ═══

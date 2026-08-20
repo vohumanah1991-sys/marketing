@@ -1,5 +1,10 @@
 node_modules/
-.vohu/
+.vohu*
+.vohu-test/
 .env
+# فایل‌های swap ویرایشگر — سواپِ .env کلید واقعی داخلش دارد
+*.sw[a-p]
+.*.sw[a-p]
+..*.sw[a-p]
 *.log
 extraction-*.json

@@ -64,6 +64,37 @@ button.g{background:var(--card);color:var(--ink);border:1px solid var(--line);fo
 </div>
 
 <script>
+// ── دام خطا ──────────────────────────────────────────────
+// روی تبلت کنسول باز نمی‌شود. پس هر خطا را روی خود صفحه نشان بده.
+(function(){
+  function show(kind, msg, extra){
+    var d = document.getElementById('jserr');
+    if (!d) { d = document.createElement('div'); d.id = 'jserr';
+      d.style.cssText = 'position:fixed;inset-inline:0;bottom:0;background:#c5221f;color:#fff;'
+        + 'padding:12px;font:13px system-ui;z-index:9999;max-height:45vh;overflow:auto;white-space:pre-wrap';
+      document.body.appendChild(d); }
+    d.textContent = '⚠ ' + kind + '\n' + msg + (extra ? '\n' + extra : '');
+  }
+  window.onerror = function(msg, src, line, col){
+    show('خطای جاوااسکریپت', msg, (src||'').split('/').pop() + ':' + line + ':' + col);
+    return false;
+  };
+  window.addEventListener('unhandledrejection', function(e){
+    show('خطای رسیدگی‌نشده', (e.reason && e.reason.message) || String(e.reason));
+  });
+
+  // ضربان: به سرور بگو جاوااسکریپت اجرا شد. اگر در لاگ سرور
+  // GET /api/version بعد از GET / نیامد، یعنی جاوااسکریپت اصلاً اجرا نشده.
+  try {
+    fetch('/api/version?from=page').then(function(r){ return r.json(); }).then(function(v){
+      var el = document.getElementById('build');
+      if (el) el.textContent = 'نسخه: ' + (v.build || '؟');
+    }).catch(function(e){ show('fetch کار نمی‌کند', e.message,
+      'یعنی مرورگر می‌تواند صفحه را بگیرد ولی درخواست پس‌زمینه نمی‌فرستد.'); });
+  } catch (e) { show('fetch اصلاً وجود ندارد', e.message); }
+})();
+</script>
+<script>
 const $ = s => document.querySelector(s);
 const M = $('#m');
 let S = {}, url = '', busy = false;
@@ -80,12 +111,19 @@ let spinTimer = null;
  * به‌جای حدس‌زدن اینکه کجای کاریم، هر دو ثانیه از سرور می‌پرسد.
  * اسم مدل هم از سرور می‌آید — در کد هیچ اسم مدلی نوشته نشده.
  */
+/** مقدار یک ورودی؛ اگر عنصر نبود رشته‌ی خالی، نه انفجار. */
+function val(id){ const e = $('#'+id); return e ? String(e.value||'').trim() : ''; }
+
 function spin(t, live){
   clearInterval(spinTimer);
   const t0 = Date.now();
   M.innerHTML = `<div class="spin"><div><span class="d"></span><span class="d"></span><span class="d"></span></div>
     <div id="sp" style="margin-top:14px;font-size:14px">${esc(t)}</div>
     <div id="sl" class="sm" style="margin-top:8px;opacity:.65"></div>
+    <div id="sbw" style="display:none;margin:10px auto 0;max-width:280px;height:6px;
+         background:rgba(128,128,128,.25);border-radius:3px;overflow:hidden">
+      <div id="sb" style="height:100%;width:0%;background:currentColor;opacity:.55;
+           border-radius:3px;transition:width .4s"></div></div>
     <div id="sn" class="sm" style="margin-top:6px;opacity:.5"></div></div>`;
 
   let last = null, ticks = 0;
@@ -104,29 +142,89 @@ function spin(t, live){
         $('#sp').textContent = p.label + '…';
         last = p;
       }
+      // نوار پیشرفت فقط وقتی که سرور درصد واقعی داده — وگرنه پنهان می‌ماند.
+      // درصد ساخته نمی‌شود؛ نبودش یعنی هنوز شمارشی در کار نیست.
+      const wrap = $('#sbw'), bar = $('#sb');
+      if (wrap && bar) {
+        if (p.percent != null) { wrap.style.display = 'block'; bar.style.width = p.percent + '%'; }
+        else wrap.style.display = 'none';
+      }
+
       const bits = [];
+      if (p.percent != null) bits.push(p.percent + '٪');
+      if (p.itemsDone != null && p.itemsTotal)
+        bits.push(p.itemsDone + ' از ' + p.itemsTotal);
       if (p.model)   bits.push(p.model);
       if (p.inputKB) bits.push(p.inputKB + 'KB ورودی');
       if (p.stages?.length) bits.push(p.stages.length + ' مرحله تمام');
       $('#sn').textContent = bits.join(' · ');
 
-      // هشدار فقط وقتی معنی دارد: یک مرحله بیش از حد طول کشیده، نه کل کار
-      if (p.elapsed != null && p.elapsed > 180)
+      // هشدار فقط وقتی معنی دارد: مرحله‌ای که خبری از خودش نمی‌دهد و طول کشیده.
+      // اگر درصد واقعی داریم، طول‌کشیدن عیب نیست — خواندن اینستاگرام ذاتاً کند است.
+      if (p.percent == null && p.elapsed != null && p.elapsed > 180)
         el.textContent = sec + ' ثانیه · این مرحله ' + p.elapsed + ' ثانیه است — ترمینال سرور را نگاه کن';
     }catch{}
   }, 1000);
 }
 
-async function api(path, body, method='POST'){
+async function api(path, body, method='POST', timeoutMs=300000){
   busy = true;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try{
-    const r = await fetch(path, method==='GET'?{}:{method,headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+    const r = await fetch(path, method==='GET'
+      ? { signal: ctrl.signal }
+      : { method, headers:{'content-type':'application/json'},
+          body: JSON.stringify(body), signal: ctrl.signal });
+
+    if (!r.ok && r.status >= 500) {
+      let msg = `سرور خطا داد (${r.status})`, hint = null;
+      try { const j = await r.json(); if (j.error) msg = j.error; hint = j.hint || null; } catch {}
+      const err = new Error(msg); err.hint = hint; throw err;
+    }
     const j = await r.json();
     if (j.error) throw new Error(j.error);
     S = j; url = j.url || url; render();
+
   }catch(e){
-    M.innerHTML = `<div class="err">خطا: ${esc(e.message)}</div><button class="g" onclick="render()">برگرد</button>`;
-  }finally{ busy = false; }
+    clearInterval(spinTimer);
+    // سه حالت را از هم جدا کن — «خطا» تنها چیزی که کاربر باید ببیند نیست
+    let title, hint;
+    if (e.name === 'AbortError') {
+      title = `بیش از ${Math.round(timeoutMs/1000)} ثانیه طول کشید و جوابی نیامد`;
+      hint  = 'یعنی سرور جواب نداد. لاگ سرور را نگاه کن: tail -20 /root/repo/vohu.log';
+    } else if (e instanceof TypeError) {
+      title = 'اصلاً به سرور نرسید';
+      hint  = 'سرور خوابیده یا شبکه قطع است. systemctl status vohu را چک کن.';
+    } else {
+      title = e.message;
+      // اگر سرور گفته باشد چه کار باید کرد، همان را نشان بده —
+      // «خطای خود برنامه» برای خالی‌بودن حساب یا شلوغی Anthropic غلط است.
+      hint  = e.hint || 'این خطای خود برنامه است، نه شبکه.';
+    }
+    M.innerHTML = `<div class="err">${esc(title)}</div>
+      <p class="sm">${esc(hint)}</p>
+      <button onclick="checkConn()">بررسی اتصال</button>
+      <button class="g" onclick="render()">برگرد</button>
+      <div id="pg" class="sm" style="margin-top:12px"></div>`;
+  }finally{ clearTimeout(timer); busy = false; }
+}
+
+// بررسی اتصال — تا لازم نباشد کاربر با curl ور برود
+async function checkConn(){
+  const box = $('#pg') || M;
+  box.innerHTML = '<p class="sm">در حال بررسی…</p>';
+  try{
+    const v = await (await fetch('/api/version')).json();
+    const t = await (await fetch('/api/selftest')).json();
+    const bad = (t.checks||[]).filter(c => c.ok === false);
+    box.innerHTML = `<div class="card"><b>${esc(t['خلاصه']||'')}</b>
+      <div class="sm">نسخه‌ی سرور: ${esc(v.build||'؟')} · مدل: ${esc(v.model||'؟')}</div>
+      ${bad.map(b=>`<div class="sm">✗ ${esc(b.name)} — ${esc(b.detail||b.error||'')}</div>`).join('')}
+      </div>`;
+  }catch(e){
+    box.innerHTML = `<div class="err">به سرور نرسیدم: ${esc(e.message)}</div>`;
+  }
 }
 
 function render(){
@@ -161,7 +259,9 @@ function start(){
 
   <textarea id="n" placeholder="در یک خط چه می‌فروشی؟ (اختیاری)"></textarea>
   <p class="sm">بدون @ و بدون www و بدون https — خودم درست می‌کنم. هرکدام را داری بده، همه را با هم می‌خوانم.</p>
-  <button onclick="go()">شروع</button>`;
+  <button onclick="go()">شروع</button>
+  <p class="sm" style="margin-top:18px"><button class="g" type="button" onclick="checkConn()">بررسی اتصال</button> · <span id="build">نسخه: …</span> · <a href="/diag">تشخیص</a></p>
+  <div id="pg" class="sm"></div>`;
   prev();
 }
 
@@ -180,18 +280,20 @@ function nrm(kind, raw){
 function prev(){
   const p = $('#pv'); if(!p) return;
   const rows = [['site','f_site','سایت'],['instagram','f_ig','اینستاگرام'],['telegram','f_tg','تلگرام']]
-    .map(([k,id,fa]) => { const v = nrm(k, $('#'+id).value); return v ? `${fa}: <span dir="ltr">${esc(v)}</span>` : null; })
+    .map(([k,id,fa]) => { const v = nrm(k, val(id)); return v ? `${fa}: <span dir="ltr">${esc(v)}</span>` : null; })
     .filter(Boolean);
-  const site = $('#f_site').value.trim();
+  const site = val('f_site');
   const bad  = site && !nrm('site', site) ? '<div style="color:#c33">سایت باید نقطه داشته باشد — مثل example.com</div>' : '';
   p.innerHTML = bad + (rows.length ? 'می‌خوانم → ' + rows.join(' · ') : '');
 }
 function go(){
-  const site = $('#f_site').value.trim(), ig = $('#f_ig').value.trim(), tg = $('#f_tg').value.trim();
+  // ⚠ همه‌ی ورودی‌ها را *قبل* از spin بخوان.
+  // spin محتوای صفحه را عوض می‌کند و ورودی‌ها از DOM حذف می‌شوند؛
+  // خواندن بعد از آن یعنی null.value و کل تابع بی‌صدا می‌میرد.
+  const site = val('f_site'), ig = val('f_ig'), tg = val('f_tg'), note = val('n');
   if(!site && !ig && !tg){ alert('دست‌کم یکی را پر کن.'); return; }
-  const n = [nrm('site',site), nrm('instagram',ig), nrm('telegram',tg)].filter(Boolean).length;
   spin('منابع را می‌خوانم…', true);
-  api('/api/run', { site, instagram:ig, telegram:tg, note:$('#n').value.trim() });
+  api('/api/run', { site, instagram:ig, telegram:tg, note });
 }
 
 // نوار «چه خواندم و چه نخواندم» — بالای هر صفحه‌ای که بعد از منابع می‌آید
@@ -200,12 +302,32 @@ function sourceBar(){
   if (!src.length) return '';
   const ok  = src.filter(x=>x.ok);
   const bad = src.filter(x=>!x.ok);
-  let h = `<div class="gate">خواندم: ${ok.map(x=>esc(x.label)+(x.posts?` (${x.posts} پست)`:'')).join(' · ') || '—'}`;
+  // «از تاریخچه» پنهان نمی‌ماند: شاهدِ دیروز نباید شاهدِ امروز جا بزند
+  const age = t => { if(!t) return ''; const h = (Date.now()-new Date(t).getTime())/3600000;
+                     return h < 1 ? 'همین حالا' : (h < 48 ? Math.round(h)+' ساعت پیش'
+                                                          : Math.round(h/24)+' روز پیش'); };
+  const tag = x => esc(x.label) + (x.posts?` (${x.posts} پست)`:'')
+                 + (x.via==='history' ? ` — از تاریخچه، ${age(x.readAt)}` : '');
+  let h = `<div class="gate">خواندم: ${ok.map(tag).join(' · ') || '—'}`;
   if (bad.length) h += `<br>نخواندم: ${bad.map(x=>esc(x.label)+' ('+esc(x.error||'')+')').join(' · ')}`
                     + `<br><span class="sm">اینها را «ندارد» حساب نکردم — «نمی‌دانم» حساب کردم.</span>`;
   const ig = src.find(x => x.kind === 'instagram');
+  if (bad.length) h += `<br><button class="g" style="margin-top:10px" onclick="retrySources()">دوباره بخوان</button>`;
   if (ig) h += `<br><button class="g" style="margin-top:10px" onclick="igScreen()">استخراج عمیق اینستاگرام</button>`;
   return h + '</div>';
+}
+
+/**
+ * منابع را از نو بخوان.
+ * لازم است چون نتیجه‌ی خواندن ذخیره می‌شود؛ بدون این، خطای دفعه‌ی قبل
+ * برای همیشه تکرار می‌شد حتی بعد از رفع علتش.
+ */
+function retrySources(){
+  const src = (S.page && S.page.sources) || [];
+  const pick = k => { const x = src.find(s => s.kind === k); return x ? x.url : ''; };
+  spin('دوباره می‌خوانم…', true);
+  api('/api/run', { fresh: true, site: pick('site'), instagram: pick('instagram'),
+                    telegram: pick('telegram'), note: (S.note || '') });
 }
 
 // ── استخراج اینستاگرام ───────────────────────────────────────
@@ -246,10 +368,10 @@ function igScreen(){
 }
 
 async function igStart(){
-  const target = $('#ig_t').value.trim();
+  const target = val('ig_t');
   if(!target){ alert('آدرس یا آی‌دی پیج را بنویس.'); return; }
   const body = { target,
-    posts: Number($('#ig_p').value), reels: Number($('#ig_r').value),
+    posts: Number(val('ig_p')), reels: Number(val('ig_r')),
     withMedia: $('#ig_m').checked };
   $('#ig_out').innerHTML = '<p class="sm">در حال ثبت کار…</p>';
   try{
@@ -316,7 +438,7 @@ function pageBlocked(){
   <button onclick="sendPageText()">با این متن ادامه بده</button>`;
 }
 function sendPageText(){
-  const t = $('#pt').value.trim();
+  const t = val('pt');
   if (t.length < 200) { alert('متن خیلی کوتاه است — دست‌کم ۲۰۰ نویسه لازم دارم.'); return; }
   spin('متن را می‌خوانم و کسب‌وکار را می‌فهمم…', true);
   api('/api/run/page-text', { url, text:t });
@@ -334,7 +456,7 @@ function competitors(){
   <p class="sm">بدون رقبا دو الگو از هفت الگو خاموش می‌مانند — جمله‌ی اول ضعیف‌تر درمی‌آید.</p>`;
 }
 function sendComp(skip){
-  const c = skip ? [] : ['c1','c2','c3'].map(i=>$('#'+i).value.trim()).filter(Boolean);
+  const c = skip ? [] : ['c1','c2','c3'].map(val).filter(Boolean);
   spin(c.length ? 'رقبا را می‌خوانم و زمین بازی را می‌سازم…' : 'بازار را درمی‌آورم…', true);
   api('/api/run/competitors', { url, competitors:c });
 }
@@ -397,8 +519,8 @@ function sendAns(){
     const t=document.querySelector(`.at[data-a="${i}"]`).value.trim();
     assumptions[a.statement] = c && c.textContent==='درست است' ? 'درست' : (t||'نه');
   });
-  const w=$('#cw').value.trim();
-  if(w) constraints.push({what:w,reason:$('#cr').value.trim()||'نگفته',kind:'concern_based',
+  const w=val('cw');
+  if(w) constraints.push({what:w,reason:val('cr')||'نگفته',kind:'concern_based',
     setAt:new Date().toISOString().slice(0,10),revisitWhen:['اگر کاربر خودش دوباره مطرح کند']});
   spin('برنامه را می‌سازم…', true);
   api('/api/run/answers',{url,answers,assumptions,constraints});
@@ -426,15 +548,20 @@ function strategy(){
     <div class="sm">${esc(c.riskiestAssumption)}</div></div></div>
   <div class="gate" style="margin-top:16px"><b>تا اینجا هیچ محتوایی ساخته نشده.</b>
     تا این برنامه را تأیید نکنی، یک خط هم نمی‌نویسم.</div>
+  ${c.producedBy?`<p class="sm" style="opacity:.6">این کارت را ${esc(c.producedBy.provider)}/${esc(c.producedBy.model||'')} ساخته</p>`:''}
   <button onclick="approve()">تأیید می‌کنم</button>`;
 }
 function approve(){ spin('کمپین را طراحی می‌کنم…', true); api('/api/run/approve',{url}); }
 
 function usageBar(){
   const u = S.usage; if(!u) return '';
-  return `<p class="sm" style="opacity:.6">${u.calls} فراخوانی · ${Math.round(u.seconds)} ثانیه · `
+  const eng = S.engine ? `${S.engine.provider}/${S.engine.model||''} · ` : '';
+  return `<p class="sm" style="opacity:.6">${esc(eng)}${u.calls} فراخوانی · ${Math.round(u.seconds)} ثانیه · `
        + `${(u.inputTokens/1000).toFixed(0)}K→${(u.outputTokens/1000).toFixed(1)}K توکن`
-       + (u.usd ? ` · $${u.usd.toFixed(2)} (${esc(u.model||'')})` : '') + `</p>`;
+       + (u.usd ? ` · $${u.usd.toFixed(2)} (${esc(u.model||'')})` : '')
+       // هزینه‌ی مدل جایگزین را نمی‌دانیم؛ صفر نشانش نمی‌دهیم
+       + (u.unpriced ? ` · هزینه‌ی ${u.unpriced} فراخوان نامعلوم (${esc(u.model||'')})` : '')
+       + `</p>`;
 }
 function campaign(){
   const c = S.campaign || {};
@@ -460,7 +587,7 @@ function campaign(){
   ${usageBar()}`;
 }
 async function check(){
-  const content = $('#ct').value.trim(); if(!content) return;
+  const content = val('ct'); if(!content) return;
   $('#cr2').innerHTML = '<div class="sm" style="padding:14px 0">در حال بررسی…</div>';
   try{
     const r = await fetch('/api/check',{method:'POST',headers:{'content-type':'application/json'},

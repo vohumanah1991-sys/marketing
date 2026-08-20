@@ -13,7 +13,7 @@ import express from 'express';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { startRun, getRun, advance, normalizeSource } from './lib/session.js';
-import { saveRun } from './services/store.js';
+import { saveRun, storeDir } from './services/store.js';
 import { checkContent } from './lib/pipeline.js';
 import { createJob, getJob, listJobs, registerHandler, markInterrupted } from './services/jobs.js';
 import { syncInstagram, loadState, resolveLimits } from './lib/igSync.js';
@@ -25,18 +25,17 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';   // روی سرور باید همه‌ی رابط‌ها باشد، نه فقط localhost
 const here = path.dirname(fileURLToPath(import.meta.url));
+const STARTED_AT = new Date().toISOString();
 
 app.use(express.json({ limit: '2mb' }));
 
 // هر درخواست لاگ می‌شود. اگر ترمینال ساکت است، یعنی درخواست اصلاً نرسیده —
 // و آن یعنی مشکل از شبکه/مرورگر است، نه از برنامه.
 app.use((req, res, next) => {
-  if (req.path.startsWith('/api')) {
-    const t0 = Date.now();
-    console.log(`  ← ${req.method} ${req.path}`);
-    res.on('finish', () =>
-      console.log(`  → ${req.method} ${req.path} · ${res.statusCode} · ${Date.now() - t0}ms`));
-  }
+  const t0 = Date.now();
+  console.log(`  ← ${req.method} ${req.path}`);
+  res.on('finish', () =>
+    console.log(`  → ${req.method} ${req.path} · ${res.statusCode} · ${Date.now() - t0}ms`));
   next();
 });
 
@@ -52,7 +51,9 @@ app.use(express.static(path.join(here, 'public')));
 // خطای مدل نباید کل سرور را بخواباند
 const guard = fn => (req, res) => fn(req, res).catch(e => {
   console.error('[vohu]', e.message);
-  res.status(500).json({ error: e.message });
+  // hint را سرویس مدل می‌گذارد — «حالا چه کار کنم؟». اگر نبود، رابط
+  // خودش جمله‌ی عمومی می‌گذارد.
+  res.status(500).json({ error: e.message, hint: e.hint || null });
 });
 
 const view = r => ({
@@ -79,7 +80,9 @@ const view = r => ({
                 vocab: (r.run.stages.market.buyerVocabulary || []).slice(0, 4) } : null,
   coverage:  r.run.stages.knowledge?.coverage || null,
   condensed: r.run.stages.condensed || 0,
-  usage:     r.run.usage || null
+  usage:     r.run.usage || null,
+  // سرویس قفل‌شده‌ی این اجرا — تا در رابط معلوم باشد با چه چیزی ساخته می‌شود
+  engine:    r.run.engine || null
 });
 
 // شروع یا ادامه
@@ -93,9 +96,19 @@ app.post('/api/run', guard(async (req, res) => {
 
   const url = site || ig || tg;
   if (!url) return res.status(400).json({ error: 'دست‌کم یک آدرس لازم است — سایت یا اینستاگرام یا تلگرام' });
-  let run = fresh ? await startRun({ url, note }) : await getRun(url);
-  if (!run.stages) run = await startRun({ url, note });
+  // refetch یعنی «دوباره از Apify بخوان» و ناچار یعنی اجرای تازه هم:
+  // اگر فقط منابع عوض شوند و تحلیل‌های قبلی سر جایشان بمانند، تحلیل روی
+  // شاهدی می‌نشیند که دیگر وجود ندارد. قاعده‌ی ۴ این را نمی‌پذیرد.
+  const refetch = Boolean(req.body.refetch);
+  let run = (fresh || refetch) ? await startRun({ url, note }) : await getRun(url);
+  run.stages = run.stages || {};
+  run.input  = run.input  || {};
   if (note && !run.note) run.note = note;
+
+  // بدون refetch، اگر استخراج تازه‌ای در تاریخچه باشد از همان استفاده می‌شود —
+  // چون هر فراخوان Apify پول است. fresh زنجیره را از نو شروع می‌کند ولی
+  // پول تازه‌ی استخراج خرج نمی‌کند؛ فقط refetch خرج می‌کند.
+  if (refetch) { run.input.refetch = true; delete run.igFetch; }
   if (!run.stages.page) {
     const extra = [site, ig, tg].filter(Boolean).filter(x => x !== url);
     if (Array.isArray(sources)) extra.push(...sources.map(x => String(x || '').trim()).filter(Boolean));
@@ -113,6 +126,11 @@ app.get('/api/run/progress', guard(async (req, res) => {
     label: p?.label || null,
     model: p?.model || process.env.VOHU_MODEL || null,
     inputKB: p?.inputKB ?? null,
+    // پیشرفت منبعی که مهلت ندارد (اینستاگرام/Apify) — عددها واقعی‌اند یا null
+    phase:      p?.phase      ?? null,
+    percent:    p?.percent    ?? null,
+    itemsDone:  p?.itemsDone  ?? null,
+    itemsTotal: p?.itemsTotal ?? null,
     elapsed: p?.startedAt ? Math.round((Date.now() - new Date(p.startedAt).getTime()) / 1000) : null,
     done: Boolean(p?.done),
     stages: Object.keys(run?.stages || {})
@@ -128,6 +146,7 @@ app.get('/api/run', guard(async (req, res) => {
 // رقبا
 app.post('/api/run/competitors', guard(async (req, res) => {
   const run = await getRun(req.body.url);
+  run.input = run.input || {};
   run.input.competitors = (req.body.competitors || []).filter(Boolean);
   await saveRun(run);
   res.json(view(await advance(run)));
@@ -136,6 +155,7 @@ app.post('/api/run/competitors', guard(async (req, res) => {
 // جواب سؤال‌ها و حدس‌ها
 app.post('/api/run/answers', guard(async (req, res) => {
   const run = await getRun(req.body.url);
+  run.input = run.input || {};
   run.input.replies = {
     answers: req.body.answers || {},
     assumptionResponses: req.body.assumptions || {},
@@ -148,6 +168,7 @@ app.post('/api/run/answers', guard(async (req, res) => {
 // متن صفحه، دستی — وقتی سایت به ما نداد
 app.post('/api/run/page-text', guard(async (req, res) => {
   const run = await getRun(req.body.url);
+  run.input = run.input || {};
   const text = String(req.body.text || '').trim();
   if (text.length < 200)
     return res.status(400).json({ error: 'متن خیلی کوتاه است — دست‌کم ۲۰۰ نویسه لازم داریم' });
@@ -160,6 +181,7 @@ app.post('/api/run/page-text', guard(async (req, res) => {
 // تأیید کارت
 app.post('/api/run/approve', guard(async (req, res) => {
   const run = await getRun(req.body.url);
+  run.input = run.input || {};
   run.input.approved = true;
   await saveRun(run);
   res.json(view(await advance(run)));
@@ -228,6 +250,26 @@ app.get('/api/instagram/items', guard(async (req, res) => {
 }));
 
 // وضعیت ابزارها — تا معلوم باشد OCR واقعاً کار می‌کند یا نه
+// تاریخچه‌ی چه پیج‌هایی روی دیسک هست — تا معلوم باشد از کجا می‌شود ادامه داد
+app.get('/api/instagram/history', guard(async (_req, res) => {
+  const { readdir, readFile } = await import('node:fs/promises');
+  const dir = storeDir();
+  const files = await readdir(dir).catch(() => []);
+  const out = [];
+  for (const f of files.filter(x => x.startsWith('ig-') && x.endsWith('.json'))) {
+    try {
+      const st = JSON.parse(await readFile(path.join(dir, f), 'utf8'));
+      const at = st.lastSyncAt || null;
+      out.push({ username: st.username, lastSyncAt: at,
+                 count: (st.items || []).length,
+                 exhausted: st.exhausted === true,
+                 ageH: at ? Math.round((Date.now() - new Date(at).getTime()) / 360000) / 10 : null });
+    } catch {}
+  }
+  out.sort((a, b) => String(b.lastSyncAt).localeCompare(String(a.lastSyncAt)));
+  res.json({ ttlHours: Number(process.env.IG_HISTORY_TTL_H || 24), pages: out });
+}));
+
 app.get('/api/instagram/capabilities', guard(async (_req, res) => {
   const c = await capabilities();
   res.json({ ...c, apify: apifyEnabled(),
@@ -258,6 +300,75 @@ async function timed(name, fn, ms = 20000) {
   }
 }
 
+// نسخه‌ی در حال اجرا — برای تشخیص اینکه مرورگر نسخه‌ی کش‌شده نشان می‌دهد یا نه
+// ══ صفحه‌ی تشخیص، بدون جاوااسکریپت ═════════════════════════
+//
+// اگر رابط کاربری اصلی هیچ واکنشی نشان نمی‌دهد، این صفحه جواب می‌دهد:
+// یک فرم ساده‌ی HTML که خودِ مرورگر ارسال می‌کند، بدون fetch و بدون JS.
+// اگر این کار کند، شبکه سالم است و مشکل از جاوااسکریپت مرورگر است.
+// اگر این هم کار نکند، درخواست اصلاً به سرور نمی‌رسد.
+
+const page = (title, body) => `<!doctype html><html lang="fa" dir="rtl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title><style>
+body{font-family:system-ui,sans-serif;max-width:640px;margin:0 auto;padding:20px;line-height:1.9;background:#faf9f7}
+.ok{color:#137333}.bad{color:#c5221f}
+input,button{font:inherit;padding:10px;width:100%;box-sizing:border-box;margin:6px 0;border:1px solid #ccc;border-radius:8px}
+button{background:#1a1a1a;color:#fff;border:0}
+pre{background:#fff;padding:12px;border-radius:8px;overflow:auto;font-size:12px;direction:ltr;text-align:left}
+</style></head><body>${body}</body></html>`;
+
+app.get('/diag', guard(async (_req, res) => {
+  res.setHeader('content-type', 'text/html; charset=utf-8');
+  res.setHeader('cache-control', 'no-store');
+  res.end(page('تشخیص وُهو', `
+    <h2>این صفحه بدون جاوااسکریپت کار می‌کند</h2>
+    <p>اگر این را می‌بینی، مرورگر به سرور می‌رسد.</p>
+    <form method="POST" action="/diag">
+      <p>حالا این دکمه را بزن. اگر نتیجه آمد، یعنی ارسال هم کار می‌کند
+      و مشکل فقط از جاوااسکریپت صفحه‌ی اصلی است.</p>
+      <input name="site" value="example.com">
+      <button type="submit">آزمایش ارسال</button>
+    </form>
+    <p><a href="/api/selftest">خودآزمایی (JSON)</a> · <a href="/api/version">نسخه</a> · <a href="/">صفحه‌ی اصلی</a></p>`));
+}));
+
+app.post('/diag', guard(async (req, res) => {
+  res.setHeader('content-type', 'text/html; charset=utf-8');
+  res.setHeader('cache-control', 'no-store');
+
+  // بدنه ممکن است فرم باشد نه JSON
+  let site = req.body?.site;
+  if (!site && typeof req.body === 'string') {
+    const m = /site=([^&]*)/.exec(req.body);
+    if (m) site = decodeURIComponent(m[1].replace(/\+/g, ' '));
+  }
+
+  const caps = await capabilities();
+  res.end(page('نتیجه', `
+    <h2 class="ok">✓ ارسال رسید</h2>
+    <p>مرورگر تو می‌تواند به سرور درخواست بفرستد. پس شبکه و فایروال مشکلی ندارند
+    و مشکل از جاوااسکریپت صفحه‌ی اصلی است.</p>
+    <pre>${JSON.stringify({
+      دریافت_شد: site || '(خالی)',
+      مدل: process.env.VOHU_MODEL || null,
+      کلید_کلاد: Boolean(process.env.ANTHROPIC_API_KEY),
+      توکن_آپیفای: apifyEnabled(),
+      ffmpeg: caps.ffmpeg, tesseract: caps.tesseract
+    }, null, 2)}</pre>
+    <p><a href="/diag">برگرد</a></p>`));
+}));
+
+app.get('/api/version', guard(async (_req, res) => {
+  const { readFile } = await import('node:fs/promises');
+  let build = 'نامعلوم';
+  try { build = (await readFile(path.join(here, 'BUILD'), 'utf8')).trim(); } catch {}
+  const { activeEngine } = await import('./services/vohuService.js');
+  let engine = null;
+  try { engine = activeEngine(); } catch { /* VOHU_PROVIDER نامعتبر — selftest می‌گوید */ }
+  res.json({ build, startedAt: STARTED_AT, model: engine?.model || null, provider: engine?.provider || null });
+}));
+
 app.get('/api/selftest', guard(async (_req, res) => {
   const checks = [];
 
@@ -268,6 +379,18 @@ app.get('/api/selftest', guard(async (_req, res) => {
                 detail: process.env.VOHU_MODEL || 'تعریف نشده' });
   checks.push({ name: 'APIFY_TOKEN', ok: apifyEnabled(),
                 detail: apifyEnabled() ? 'تعریف شده' : 'تعریف نشده — اینستاگرام خاموش است' });
+
+  // کدام سرویس؟ انتخاب صریح است، نه خودکار — و اگر مقدارش غلط باشد اینجا لو می‌رود
+  const { openaiEnabled, openaiModel, openaiBase } = await import('./services/openai.js');
+  const { activeEngine } = await import('./services/vohuService.js');
+  let engine = null, engineErr = null;
+  try { engine = activeEngine(); } catch (e) { engineErr = e.message; }
+  checks.push({ name: 'VOHU_PROVIDER', ok: Boolean(engine),
+                detail: engine ? `${engine.provider} · مدل ${engine.model || 'تعریف نشده'}` : engineErr });
+  checks.push({ name: 'OPENAI_API_KEY', ok: true,
+                detail: openaiEnabled()
+                  ? `تعریف شده · ${openaiBase()}`
+                  : 'تعریف نشده' + (engine?.provider === 'openai' ? ' — ولی VOHU_PROVIDER=openai است!' : '') });
 
   const caps = await capabilities();
   checks.push({ name: 'ffmpeg', ok: caps.ffmpeg, detail: caps.ffmpeg ? 'هست' : 'نصب نیست' });
@@ -302,6 +425,22 @@ app.get('/api/selftest', guard(async (_req, res) => {
     });
     return { detail: `مدل جواب داد: n=${out.data?.n} · ${out.meta?.model}` };
   }, 60000));
+
+  if (openaiEnabled()) {
+    checks.push(await timed('دسترسی به OpenAI', async () => {
+      const r = await fetch(`${openaiBase()}/models`,
+        { headers: { authorization: `Bearer ${process.env.OPENAI_API_KEY}` } });
+      if (r.status === 401) return { detail: 'رسید ولی کلید پذیرفته نشد (۴۰۱)', ok: false };
+      if (!r.ok) return { detail: `HTTP ${r.status}`, ok: false };
+      // مدل تعریف‌شده واقعاً وجود دارد؟ حدس نزن، از خودشان بپرس.
+      const body = await r.json().catch(() => null);
+      const ids = (body?.data || []).map(m => m.id);
+      const has = ids.includes(openaiModel());
+      return { ok: has,
+               detail: has ? `توکن معتبر است · ${openaiModel()} موجود است`
+                           : `توکن معتبر است ولی مدل «${openaiModel()}» در فهرست نیست` };
+    }, 20000));
+  }
 
   if (apifyEnabled()) {
     checks.push(await timed('دسترسی به Apify', async () => {

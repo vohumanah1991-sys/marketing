@@ -1,0 +1,33 @@
+[
+  {
+    "shortCode": "DRY001",
+    "type": "Image",
+    "url": "https://www.instagram.com/p/DRY001/",
+    "ownerUsername": "dryrun",
+    "timestamp": "2026-08-01T09:00:00.000Z",
+    "caption": "نمونه‌ی حالت خشک — این متن فقط برای تست جریان است و هیچ ربطی به هیچ کسب‌وکار واقعی ندارد. کپشن باید به اندازه‌ی کافی بلند باشد تا آستانه‌ی صد نویسه رد شود.",
+    "likesCount": 120,
+    "commentsCount": 8
+  },
+  {
+    "shortCode": "DRY002",
+    "type": "Sidecar",
+    "url": "https://www.instagram.com/p/DRY002/",
+    "ownerUsername": "dryrun",
+    "timestamp": "2026-08-05T09:00:00.000Z",
+    "caption": "نمونه‌ی دوم حالت خشک. چند اسلاید، بدون آمار کامل — تا مسیر «عدد نداریم پس null» هم در تست دیده شود.",
+    "likesCount": null,
+    "commentsCount": null
+  },
+  {
+    "shortCode": "DRY003",
+    "type": "Video",
+    "url": "https://www.instagram.com/reel/DRY003/",
+    "ownerUsername": "dryrun",
+    "timestamp": "2026-08-10T09:00:00.000Z",
+    "caption": "نمونه‌ی سوم حالت خشک — ریلز. سه نمونه لازم است تا مرحله‌ی شناخت محتوا رد نشود.",
+    "likesCount": 340,
+    "commentsCount": 21,
+    "videoPlayCount": 9100
+  }
+]

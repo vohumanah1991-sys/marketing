@@ -32,10 +32,31 @@
  * این تابع به‌جایش یک نشانگر صریح می‌گذارد که هم مدل می‌فهمد هم در لاگ دیده می‌شود.
  */
 function j(value) {
-  if (value === undefined || value === null) return '(در دسترس نیست)';
-  if (Array.isArray(value) && value.length === 0) return '(خالی)';
-  if (typeof value === 'object' && Object.keys(value).length === 0) return '(خالی)';
-  return JSON.stringify(value, null, 2);
+  const v = stripMeta(value);
+  if (v === undefined || v === null) return '(در دسترس نیست)';
+  if (Array.isArray(v) && v.length === 0) return '(خالی)';
+  if (typeof v === 'object' && Object.keys(v).length === 0) return '(خالی)';
+  return JSON.stringify(v, null, 2);
+}
+
+/**
+ * مهرِ تولید (`producedBy`) از هر چیزی که وارد پرامپت می‌شود پاک می‌شود.
+ *
+ * دلیل — قاعده‌ی «هر ورودی باید حذفش خروجی را عوض کند»: اینکه یک شناخت را
+ * کدام مدل ساخته هیچ تصمیمی را عوض نمی‌کند. فقط توکن می‌خورد و بدتر،
+ * می‌تواند مدل را جهت‌دار کند («این را خودم ساخته‌ام» یا «مال رقیب است»).
+ *
+ * مهر در **داده** می‌ماند (در .vohu/*.json) — فقط به پرامپت نمی‌رود.
+ * تست دارد: هیچ خروجی هیچ پرامپتی نباید رشته‌ی producedBy داشته باشد.
+ */
+export function stripMeta(v) {
+  if (Array.isArray(v)) return v.map(stripMeta);
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const [k, val] of Object.entries(v)) if (k !== 'producedBy') o[k] = stripMeta(val);
+    return o;
+  }
+  return v;
 }
 
 export const VOHU_CORE = `
@@ -1315,13 +1336,13 @@ ${VOHU_CORE}
 ${j(card)}
 
 آنچه برند در آن خوب است، و آنچه هرگز امتحان نکرده:
-${contentAnalysis ? JSON.stringify({ capacities: contentAnalysis.capacities, neverTried: contentAnalysis.topics?.neverTried, flatSpots: contentAnalysis.flatSpots }, null, 2) : '(نداریم)'}
+${contentAnalysis ? JSON.stringify(stripMeta({ capacities: contentAnalysis.capacities, neverTried: contentAnalysis.topics?.neverTried, flatSpots: contentAnalysis.flatSpots }), null, 2) : '(نداریم)'}
 
 بازار — ادعای ممنوع و زبان خریدار:
-${market ? JSON.stringify({ restrictedClaims: market.restrictedClaims, buyerVocabulary: market.buyerVocabulary }, null, 2) : '(نداریم)'}
+${market ? JSON.stringify(stripMeta({ restrictedClaims: market.restrictedClaims, buyerVocabulary: market.buyerVocabulary }), null, 2) : '(نداریم)'}
 
 مناسبت‌های نزدیک (فاصله را کد حساب کرده):
-${occasions?.length ? JSON.stringify(occasions.slice(0, 5), null, 2) : '(هیچ مناسبتی نزدیک نیست)'}
+${occasions?.length ? JSON.stringify(stripMeta(occasions.slice(0, 5)), null, 2) : '(هیچ مناسبتی نزدیک نیست)'}
 
 محدودیت‌های کاربر:
 ${j(knowledge?.constraints)}
@@ -1483,7 +1504,7 @@ ${j(strength)}
 - اگر allowed = "propose_hypothesis" → می‌توانی یک فرضیه پیشنهاد بدهی. فرضیه، نه واقعیت.
 
 این‌ها هرگز مجاز نیستند، در هیچ سطحی:
-${JSON.stringify(strength?.neverAllowed || [], null, 2)}
+${JSON.stringify(stripMeta(strength?.neverAllowed || []), null, 2)}
 
 ## گام یک — منبع هر مشاهده را جدا کن
 
@@ -1945,6 +1966,11 @@ export function condenseMemory(knowledge, { keepRecentCycles = 3, threshold = 30
  * از همان جنس خطای «پرسیدن چیزی که کد می‌داند» است — تمرکز را کم می‌کند.
  */
 export function knowledgeFor(stage, k = {}) {
+  // برش، بعد پاک‌کردن مهر تولید — مهر هیچ تصمیمی را عوض نمی‌کند
+  return stripMeta(sliceKnowledge(stage, k));
+}
+
+function sliceKnowledge(stage, k = {}) {
   // سازگاری با خروجی‌های قدیمی که usable بولی بود.
   // بدون این، برش صفر محصول برمی‌گرداند و کمپین بی‌سوژه می‌ماند — بی‌سروصدا.
   const usable = (k.productUsability || []).filter(p =>
