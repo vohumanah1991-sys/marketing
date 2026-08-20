@@ -751,6 +751,20 @@ t('تلاش برای reasoning_effort بی‌سروصدا نمی‌افتد — 
      'تشخیص مدل استدلالی');
 });
 
+t('هر پیام خطایی که کاربر را متوقف می‌کند، راه ادامه دارد', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ui = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+
+  ok(/function freshStart\s*\(/.test(ui), 'freshStart باید تعریف شده باشد');
+  ok(/freshStart[\s\S]{0,200}fresh\s*:\s*true/.test(ui),
+     'شروع از نو باید اجرای تازه بسازد، نه ادامه‌ی همان بن‌بست');
+
+  // بلوک خطای api() — همان چیزی که کاربر موقع گیر کردن می‌بیند
+  const block = ui.match(/M\.innerHTML = `<div class="err">\$\{esc\(title\)\}[\s\S]*?`;/);
+  ok(block, 'بلوک نمایش خطا پیدا نشد');
+  ok(block[0].includes('freshStart()'), 'پیام خطا باید دکمه‌ی «شروع از نو» داشته باشد');
+});
+
 // ═══ خودآزمایی — نباید خودش بشکند ═══
 
 t('یک بررسی که می‌ترکد، بقیه را با خودش نمی‌برد', async () => {
