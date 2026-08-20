@@ -756,13 +756,20 @@ t('هر پیام خطایی که کاربر را متوقف می‌کند، را
   const ui = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 
   ok(/function freshStart\s*\(/.test(ui), 'freshStart باید تعریف شده باشد');
-  ok(/freshStart[\s\S]{0,200}fresh\s*:\s*true/.test(ui),
+  ok(/function freshStart[\s\S]{0,700}fresh\s*:\s*true/.test(ui),
      'شروع از نو باید اجرای تازه بسازد، نه ادامه‌ی همان بن‌بست');
 
   // بلوک خطای api() — همان چیزی که کاربر موقع گیر کردن می‌بیند
   const block = ui.match(/M\.innerHTML = `<div class="err">\$\{esc\(title\)\}[\s\S]*?`;/);
   ok(block, 'بلوک نمایش خطا پیدا نشد');
   ok(block[0].includes('freshStart()'), 'پیام خطا باید دکمه‌ی «شروع از نو» داشته باشد');
+
+  // ⚠ url فقط بعد از یک جواب موفق پر می‌شود. اگر همان اولین درخواست خطا بدهد،
+  // «شروع از نو» بدون این کاربر را به فرم خالی برمی‌گرداند و او دوباره همان
+  // درخواستِ بدون fresh را می‌فرستد — حلقه‌ی بی‌پایان همان خطا.
+  ok(/lastRun\s*=\s*body/.test(ui), 'آخرین درخواست /api/run باید نگه داشته شود');
+  ok(/\.\.\.lastRun,\s*fresh\s*:\s*true/.test(ui),
+     'وقتی url خالی است، شروع از نو باید همان منابع را با fresh دوباره بفرستد');
 });
 
 // ═══ خودآزمایی — نباید خودش بشکند ═══
