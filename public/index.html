@@ -205,12 +205,31 @@ async function api(path, body, method='POST', timeoutMs=300000){
       // «خطای خود برنامه» برای خالی‌بودن حساب یا شلوغی Anthropic غلط است.
       hint  = e.hint || 'این خطای خود برنامه است، نه شبکه.';
     }
+    // ⚠ هر پیام خطایی که کاربر را متوقف می‌کند باید دست‌کم یک راه ادامه
+    // داشته باشد. «برگرد» به همان بن‌بست برمی‌گردد و «بررسی اتصال» فقط
+    // تشخیص است — «شروع از نو» تنها دکمه‌ای است که واقعاً جلو می‌برد.
+    // پیام قفل سرویس/مدل هم از همین‌جا رد می‌شود، پس خودش دکمه را دارد:
+    // آن پیام می‌گوید «یک اجرای تازه بساز» و این دکمه همان کار را می‌کند.
     M.innerHTML = `<div class="err">${esc(title)}</div>
       <p class="sm">${esc(hint)}</p>
-      <button onclick="checkConn()">بررسی اتصال</button>
+      <button onclick="freshStart()">شروع از نو</button>
+      <button class="g" onclick="checkConn()">بررسی اتصال</button>
       <button class="g" onclick="render()">برگرد</button>
       <div id="pg" class="sm" style="margin-top:12px"></div>`;
   }finally{ clearTimeout(timer); busy = false; }
+}
+
+/**
+ * راه خروج از هر بن‌بست: اجرای تازه روی همان آدرس.
+ *
+ * اگر هنوز آدرسی نداریم، برگشتن به فرم اول همان «از نو» است.
+ * وضعیت قبلی دور ریخته می‌شود (fresh)، چون خطایی که یک بار خورده‌ایم
+ * در فایل وضعیت مانده و بدون این، هر بار همان بن‌بست تکرار می‌شود.
+ */
+function freshStart(){
+  if (!url) { S={}; render(); return; }
+  spin('از نو شروع می‌کنم…', true);
+  api('/api/run', { fresh:true, url });
 }
 
 // بررسی اتصال — تا لازم نباشد کاربر با curl ور برود
