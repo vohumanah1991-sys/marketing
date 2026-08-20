@@ -751,6 +751,52 @@ t('تلاش برای reasoning_effort بی‌سروصدا نمی‌افتد — 
      'تشخیص مدل استدلالی');
 });
 
+// ═══ خودآزمایی — نباید خودش بشکند ═══
+
+t('یک بررسی که می‌ترکد، بقیه را با خودش نمی‌برد', async () => {
+  const { check, timed } = await import('../lib/selftest.js');
+
+  const r = check('همگام', () => { throw new ReferenceError('openaiModel is not defined'); });
+  eq(r.name, 'همگام');
+  eq(r.ok, false, 'بررسیِ شکسته باید قرمز شود، نه اینکه استثنا بالا برود');
+  ok(r.error.includes('openaiModel'), `خطا باید در نتیجه بماند: ${r.error}`);
+
+  eq(check('سالم', () => ({ detail: 'خوب' })).ok, true, 'بررسی سالم پیش‌فرض سبز است');
+  eq(check('قرمزِ عمدی', () => ({ ok: false, detail: 'نیست' })).ok, false, 'خود بررسی می‌تواند ok را قرمز کند');
+
+  const a = await timed('ناهمگام', async () => { throw new Error('نرسید'); });
+  eq(a.ok, false, 'ناهمگامِ شکسته هم فقط یک خط قرمز است');
+  ok(a.error.includes('نرسید'), a.error);
+
+  const slow = await timed('کند', () => new Promise(r => setTimeout(r, 200)), 20);
+  eq(slow.ok, false, 'مهلت باید اعمال شود');
+  ok(slow.error.includes('طول کشید'), slow.error);
+});
+
+t('هر بررسی خودآزمایی داخل try خودش است', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const txt = await readFile(new URL('../server.js', import.meta.url), 'utf8');
+  // هر checks.push باید از check( یا timed( رد شود — نه یک شیء لخت که
+  // خطایش کل /api/selftest را ۵۰۰ می‌کند
+  const naked = (txt.match(/checks\.push\(\s*\{/g) || []);
+  eq(naked.length, 0, `${naked.length} بررسی بدون try — باید داخل check() یا timed() باشند`);
+});
+
+t('شماره‌ی نسخه از git می‌آید، نه از فایلی که عقب می‌ماند', async () => {
+  const { buildId } = await import('../lib/selftest.js');
+  const { existsSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const { readFile } = await import('node:fs/promises');
+  const root = fileURLToPath(new URL('..', import.meta.url));
+
+  ok(/^[0-9a-f]{7,}/.test(buildId(root) || ''), `باید هش کوتاه git باشد: ${buildId(root)}`);
+  eq(buildId('/'), null, 'بیرون از مخزن، «نمی‌دانم» جواب درست است — نه شماره‌ی غلط');
+  ok(!existsSync(new URL('../BUILD', import.meta.url)), 'فایل BUILD نباید برگردد — همیشه عقب می‌ماند');
+
+  const txt = await readFile(new URL('../server.js', import.meta.url), 'utf8');
+  ok(!txt.includes("'BUILD'"), 'server.js نباید دوباره از فایل BUILD بخواند');
+});
+
 // ═══ گزارش ═══
 await Promise.all(pending);
 console.log(`\n  ${pass} قبول · ${fail} رد\n`);
