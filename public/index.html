@@ -168,6 +168,9 @@ function spin(t, live){
 }
 
 async function api(path, body, method='POST', timeoutMs=300000){
+  // درخواست دوم روی همان اجرا، فایل وضعیت را هم‌زمان بازنویسی می‌کند.
+  // تا جواب اولی نیامده، کلیک بعدی نادیده گرفته می‌شود.
+  if (busy) return;
   busy = true;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -287,6 +290,7 @@ function prev(){
   p.innerHTML = bad + (rows.length ? 'می‌خوانم → ' + rows.join(' · ') : '');
 }
 function go(){
+  if (busy) return;                    // فرم دیگر در DOM نیست
   // ⚠ همه‌ی ورودی‌ها را *قبل* از spin بخوان.
   // spin محتوای صفحه را عوض می‌کند و ورودی‌ها از DOM حذف می‌شوند؛
   // خواندن بعد از آن یعنی null.value و کل تابع بی‌صدا می‌میرد.
@@ -456,6 +460,7 @@ function competitors(){
   <p class="sm">بدون رقبا دو الگو از هفت الگو خاموش می‌مانند — جمله‌ی اول ضعیف‌تر درمی‌آید.</p>`;
 }
 function sendComp(skip){
+  if (busy) return;
   const c = skip ? [] : ['c1','c2','c3'].map(val).filter(Boolean);
   spin(c.length ? 'رقبا را می‌خوانم و زمین بازی را می‌سازم…' : 'بازار را درمی‌آورم…', true);
   api('/api/run/competitors', { url, competitors:c });
@@ -508,6 +513,7 @@ function pick(el){
   el.classList.add('on');
 }
 function sendAns(){
+  if (busy) return;
   const answers={}, assumptions={}, constraints=[];
   (S.questions.questions||[]).forEach((q,i)=>{
     const t=document.querySelector(`.qt[data-q="${i}"]`).value.trim();
@@ -588,6 +594,10 @@ function campaign(){
 }
 async function check(){
   const content = val('ct'); if(!content) return;
+  // این تنها دکمه‌ای است که بعد از کلیک روی صفحه می‌ماند —
+  // بدون این محافظ، هر کلیک یک درخواست تازه می‌سازد.
+  if (busy) return;
+  busy = true;
   $('#cr2').innerHTML = '<div class="sm" style="padding:14px 0">در حال بررسی…</div>';
   try{
     const r = await fetch('/api/check',{method:'POST',headers:{'content-type':'application/json'},
@@ -601,6 +611,7 @@ async function check(){
         c.status==='blocked'?'بسته':c.status==='needsRecheck'?'کهنه':'تأیید تو لازم'}</span> ${esc(c.text)}
         ${c.rewrite?`<div class="sm">پیشنهاد: ${esc(c.rewrite)}</div>`:''}</div>`).join('');
   }catch(e){ $('#cr2').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+  finally{ busy = false; }
 }
 
 function tog(id){ $('#'+id).classList.toggle('on'); }
