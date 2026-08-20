@@ -8,3 +8,8 @@ node_modules/
 ..*.sw[a-p]
 *.log
 extraction-*.json
+
+# تنظیمات محلی Claude Code — مال این ماشین است، نه پروژه.
+# در .gitignore پروژه است نه فقط ignore شخصی: وگرنه هرکس (و هر سرویسی که
+# بدون $HOME اجرا می‌شود) درخت را «تغییریافته» می‌بیند.
+.claude/settings.local.json
