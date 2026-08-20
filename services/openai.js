@@ -19,6 +19,46 @@ const DEFAULT_MODEL = 'gpt-4.1';
 export const openaiBase  = () => (process.env.OPENAI_BASE_URL || DEFAULT_BASE).replace(/\/+$/, '');
 export const openaiModel = () => process.env.OPENAI_MODEL || DEFAULT_MODEL;
 
+/**
+ * مدل‌های استدلالی OpenAI — o1/o3/o4 و خانواده‌ی gpt-5.
+ * فقط برای این است که پیام لاگ درست باشد؛ روی بدنه‌ی درخواست اثری ندارد.
+ */
+export const isReasoningModel = (model) =>
+  /^(o\d|gpt-5)/i.test(String(model || '').trim());
+
+/**
+ * reasoning_effort هرگز فرستاده نمی‌شود — دلیلش یک تصمیم است، نه فراموشی.
+ *
+ * کل مسیر وُهو ابزارمحور است: هر تماس با tools + tool_choice اجباری می‌رود
+ * تا خروجی مطابق اسکیما باشد. reasoning_effort با همین حالت جور در نمی‌آید،
+ * پس این پارامتر در هیچ تماسی داخل بدنه نمی‌رود.
+ *
+ * ولی اگر کسی تلاش کند بدهد (OPENAI_REASONING_EFFORT یا آرگومان تابع)،
+ * بی‌سروصدا نمی‌افتد: یک خط در لاگ سرور می‌گوید چه خواسته شد و چرا اعمال نشد.
+ * یک بار برای هر ترکیب مدل+مقدار — نه یک خط به ازای هر تماس، چون یک اجرا
+ * ده‌ها تماس دارد و لاگ را کور می‌کند.
+ *
+ * فقط روی مدل استدلالی. روی مدل غیراستدلالی این پارامتر اصلاً معنا ندارد،
+ * پس لاگی هم لازم نیست.
+ */
+const _effortLogged = new Set();
+
+export function noteDroppedReasoningEffort(effort, model) {
+  const want = String(effort ?? '').trim();
+  if (!want || want === 'none') return null;              // چیزی خواسته نشده
+  if (!isReasoningModel(model)) return null;              // پارامتر بی‌معناست — لاگ هم ندارد
+
+  const line = `[openai] reasoning_effort=«${want}» اعمال نشد — مدل «${model}» استدلالی است، `
+    + 'ولی این درخواست ابزارمحور است (tools + tool_choice اجباری) و وُهو این پارامتر را نمی‌فرستد';
+
+  const key = `${model} ${want}`;
+  if (!_effortLogged.has(key)) {
+    _effortLogged.add(key);
+    console.warn(line);
+  }
+  return line;
+}
+
 /** فقط یعنی «کلید هست؟» — نه اینکه سرویس انتخاب‌شده کدام است. */
 export const openaiEnabled = () => Boolean(process.env.OPENAI_API_KEY);
 
@@ -60,9 +100,12 @@ export function faOpenAIError(status, body, { timeoutMs, model } = {}) {
  * مدل مجبور می‌شود یک تابع با همان اسکیما را صدا بزند، پس خروجی
  * ساختاریافته است و لازم نیست متن پارس شود.
  */
-export async function callOpenAISchema({ prompt, schema, toolName = 'result', maxTokens = 8000, timeoutMs = 180000, model }) {
+export async function callOpenAISchema({ prompt, schema, toolName = 'result', maxTokens = 8000, timeoutMs = 180000, model, reasoningEffort }) {
   model = model || openaiModel();
   const t0 = Date.now();
+
+  // خواسته‌ی reasoning_effort اینجا تمام می‌شود: فقط لاگ، هیچ‌وقت داخل بدنه.
+  noteDroppedReasoningEffort(reasoningEffort ?? process.env.OPENAI_REASONING_EFFORT, model);
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -76,6 +119,7 @@ export async function callOpenAISchema({ prompt, schema, toolName = 'result', ma
         'content-type': 'application/json'
       },
       signal: ctrl.signal,
+      // در این بدنه عمداً reasoning_effort نیست — بالای فایل نوشته چرا.
       body: JSON.stringify({
         model,
         max_completion_tokens: maxTokens,
