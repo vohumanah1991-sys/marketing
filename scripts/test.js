@@ -18,7 +18,8 @@ import { costOf } from '../lib/session.js';
 import { isRealText, textResult, dedupeTexts } from '../services/media.js';
 import * as VS from '../services/vohuService.js';
 import { faModelError, faModelHint, configuredProvider, activeEngine, callWithSchema } from '../services/vohuService.js';
-import { openaiEnabled, openaiModel, openaiBase, redactOpenAI, faOpenAIError } from '../services/openai.js';
+import { openaiEnabled, openaiModel, openaiBase, redactOpenAI, faOpenAIError,
+         isReasoningModel, noteDroppedReasoningEffort, callOpenAISchema } from '../services/openai.js';
 
 let pass = 0, fail = 0;
 const failures = [];
@@ -713,6 +714,41 @@ t('خطای OpenAI هم فارسی است، نه JSON', () => {
 t('مدل OpenAI قیمت ساختگی نمی‌گیرد', () => {
   eq(costOf('gpt-4.1', 1000, 1000), null, 'قیمت ناشناخته باید null بماند، نه صفر');
   ok(costOf('claude-sonnet-5', 1e6, 0) > 0, 'قیمت مدل شناخته‌شده باید حساب شود');
+});
+
+t('reasoning_effort هرگز داخل بدنه‌ی درخواست نمی‌رود', async () => {
+  const real = globalThis.fetch;
+  let sent = null;
+  globalThis.fetch = async (_url, opt) => {
+    sent = JSON.parse(opt.body);
+    return { ok: true, status: 200, text: async () => JSON.stringify({
+      choices: [{ message: { tool_calls: [{ function: { arguments: '{"a":1}' } }] } }] }) };
+  };
+  try {
+    await withEnv({ OPENAI_API_KEY: 'sk-t', OPENAI_REASONING_EFFORT: 'high' }, () =>
+      callOpenAISchema({ prompt: 'x', schema: { type: 'object', required: ['a'], properties: {} },
+                         toolName: 'x', model: 'gpt-5-mini' }));
+  } finally { globalThis.fetch = real; }
+  ok(sent, 'درخواست باید ساخته شده باشد');
+  ok(!('reasoning_effort' in sent), `reasoning_effort نباید فرستاده شود: ${JSON.stringify(sent)}`);
+  ok(sent.tools && sent.tool_choice, 'مسیر باید ابزارمحور بماند');
+});
+
+t('تلاش برای reasoning_effort بی‌سروصدا نمی‌افتد — یک خط لاگ می‌شود', () => {
+  const warn = console.warn;
+  const lines = [];
+  console.warn = (...a) => lines.push(a.join(' '));
+  try {
+    noteDroppedReasoningEffort('high', 'o3-mini-تست');
+    noteDroppedReasoningEffort('high', 'o3-mini-تست');   // تکرار نباید لاگ تازه بسازد
+    eq(noteDroppedReasoningEffort('low', 'gpt-4.1-تست'), null, 'مدل غیراستدلالی اصلاً لاگ ندارد');
+    eq(noteDroppedReasoningEffort(undefined, 'o3-mini'), null, 'وقتی چیزی خواسته نشده، لاگی هم نیست');
+    eq(noteDroppedReasoningEffort('none', 'o3-mini'), null, '«none» یعنی همان رفتار پیش‌فرض');
+  } finally { console.warn = warn; }
+  eq(lines.length, 1, `فقط یک خط، آن هم برای مدل استدلالی: ${JSON.stringify(lines)}`);
+  ok(lines[0].includes('استدلالی است') && lines[0].includes('ابزارمحور'), lines[0]);
+  ok(isReasoningModel('o1') && isReasoningModel('gpt-5.1') && !isReasoningModel('gpt-4.1'),
+     'تشخیص مدل استدلالی');
 });
 
 // ═══ گزارش ═══
