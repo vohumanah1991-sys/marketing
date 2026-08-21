@@ -16,7 +16,8 @@
     "verify": "node scripts/verify-facts.js",
     "stability": "node scripts/stability-check.js",
     "test:once": "node scripts/test-once.js",
-    "test:loop": "node scripts/test-loop.js"
+    "test:loop": "node scripts/test-loop.js",
+    "sync:brain": "node scripts/sync-brain.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",

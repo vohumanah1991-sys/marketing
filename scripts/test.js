@@ -39,10 +39,19 @@ const failures = [];
  * رد می‌شوند، ولی **شمرده و گزارش** می‌شوند. تست بی‌صدا رد شده، یعنی پوششی
  * که فکر می‌کنی داری و نداری.
  */
-const SHELL_FILE = new URL('../server.js', import.meta.url);
-const hasShell = existsSync(SHELL_FILE);
-const skippedShell = [];
-const tShell = (name, fn) => hasShell ? t(name, fn) : skippedShell.push(name);
+const skippedHere = [];
+
+/**
+ * تستی که به فایلی وابسته است که فقط در **مخزن مرجع** وجود دارد.
+ * جایی که آن فایل نیست، تست موضوعیت ندارد — رد می‌شود و نامش چاپ می‌شود.
+ */
+const onlyWith = (fileUrl, why) => (name, fn) =>
+  existsSync(fileUrl) ? t(name, fn) : skippedHere.push({ name, why });
+
+// پوسته‌ی همین مخزن: هشدار سرورِ کهنه، ساختار خودآزمایی، سیم‌کشی دروازه‌ها
+const tShell = onlyWith(new URL('../server.js', import.meta.url), 'server.js این مخزن');
+// ابزار هم‌گام‌سازی: فقط مرجع دارد، چون فقط مرجع هم‌گام می‌کند
+const tSync  = onlyWith(new URL('./sync-brain.js', import.meta.url), 'scripts/sync-brain.js مرجع');
 
 const pending = [];
 function t(name, fn) {
@@ -1078,6 +1087,89 @@ t('رابط تا جواب‌نگرفتن، دکمه‌ی تأیید را باز 
   ok(/درست است/.test(ui) && /نه، اینطور است/.test(ui), 'هر دو جواب باید ممکن باشند');
 });
 
+// ── هم‌گام‌کردن مغز با spark ──────────────────────────────────
+// مغز در دو جا زندگی می‌کند ولی یک نسخه است. کپیِ دستی دو خطر بی‌سروصدا
+// دارد: یا کپی عقب می‌ماند، یا تغییرِ محلیِ آنجا را دور می‌ریزد.
+
+tSync('فهرست فایل‌های مغز با آنچه واقعاً روی دیسک است یکی است', async () => {
+  const { readFile, readdir } = await import('node:fs/promises');
+  const src = await readFile(new URL('./sync-brain.js', import.meta.url), 'utf8');
+
+  // فقط داخل خود آرایه‌ی BRAIN — وگرنه کلیدِ فهرست استثناها هم به دام می‌افتد
+  const brainBlock = src.slice(src.indexOf('const BRAIN = ['), src.indexOf('];', src.indexOf('const BRAIN = [')));
+  const listed = [...brainBlock.matchAll(/'((?:prompts|lib|services)\/[\w.-]+\.js)'/g)].map(m => m[1]);
+  const onDisk = [];
+  for (const dir of ['prompts', 'lib', 'services'])
+    for (const f of await readdir(new URL('../' + dir, import.meta.url)))
+      if (f.endsWith('.js')) onDisk.push(`${dir}/${f}`);
+
+  const exBlock = src.slice(src.indexOf('const EXCLUDED = {'), src.indexOf('};', src.indexOf('const EXCLUDED = {')));
+  const excluded = [...exBlock.matchAll(/'((?:prompts|lib|services)\/[\w.-]+\.js)':/g)].map(m => m[1]);
+
+  // ⚠ هر فایل مغز باید در **یکی** از دو فهرست باشد: کپی‌شونده‌ها یا
+  // استثناهای صریح. فایل تازه‌ای که در هیچ‌کدام نیاید، هرگز به spark نمی‌رسد
+  // و هیچ‌کس هم نمی‌فهمد — تا روزی که آنجا یک import شکست بخورد.
+  const unaccounted = onDisk.filter(f => !listed.includes(f) && !excluded.includes(f));
+  eq(unaccounted.join('، '), '', 'فایل مغز که نه کپی می‌شود نه استثنا شده — بی‌صدا جا می‌ماند');
+  const ghosts = [...listed, ...excluded].filter(f => !onDisk.includes(f));
+  eq(ghosts.join('، '), '', 'فایلی که دیگر وجود ندارد ولی هنوز در فهرست است');
+
+  ok(excluded.includes('services/store.js'), 'store.js باید صریح استثنا شده باشد، نه فراموش‌شده');
+  ok(!listed.includes('services/store.js'), 'و نباید کپی شود');
+  eq(listed.length, 17, '۱۷ فایل مغز');
+});
+
+tSync('هم‌گام‌سازی روی فایلی که آنجا دستی عوض شده، دست نمی‌گذارد', async () => {
+  const { mkdtemp, mkdir, writeFile, readFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { execFileSync } = await import('node:child_process');
+  const path = (await import('node:path')).default;
+
+  const dest = await mkdtemp(path.join(tmpdir(), 'vohu-sync-'));
+  for (const d of ['prompts', 'lib', 'services']) await mkdir(path.join(dest, d));
+
+  const run = (...extra) => execFileSync('node',
+    [new URL('./sync-brain.js', import.meta.url).pathname, '--brain-only', ...extra],
+    { env: { ...process.env, SPARK_DIR: dest, NO_COLOR: '1' }, encoding: 'utf8' });
+
+  // ۱ · مقصد خالی → همه تازه‌اند و کپی می‌شوند
+  run('--write');
+  const copied = await readFile(path.join(dest, 'lib/session.js'), 'utf8');
+  ok(copied.length > 100, 'فایل واقعاً کپی شد');
+
+  // ۲ · دستکاری محلی → باید رد شود و کپی نکند
+  const victim = path.join(dest, 'lib/session.js');
+  await writeFile(victim, copied + '\n// دست‌کاری محلی\n');
+  const out = run('--write');
+  ok(/دستی عوض شده/.test(out), `باید هشدار بدهد: ${out.slice(-300)}`);
+  const after = await readFile(victim, 'utf8');
+  ok(after.includes('دست‌کاری محلی'), '⚠ تغییر محلی نباید دور ریخته شود');
+
+  // ۳ · با --force، و فقط با آن
+  run('--write', '--force', 'lib/session.js');
+  const forced = await readFile(victim, 'utf8');
+  ok(!forced.includes('دست‌کاری محلی'), 'با --force بازنویسی می‌شود');
+
+  // ۴ · بعدش دیگر هشداری نیست — وگرنه هشدار برای همیشه می‌ماند و بی‌معنا می‌شود
+  ok(!/دستی عوض شده/.test(run()), 'بعد از force، مانیفست به‌روز است');
+
+  // ۵ · store.js هرگز — جداسازی کاربرها به آن بند است
+  ok(!existsSync(path.join(dest, 'services/store.js')), 'store.js نباید کپی شده باشد');
+});
+
+tSync('بدون --write هیچ چیزی نوشته نمی‌شود', async () => {
+  const { mkdtemp, mkdir, readdir } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { execFileSync } = await import('node:child_process');
+  const path = (await import('node:path')).default;
+
+  const dest = await mkdtemp(path.join(tmpdir(), 'vohu-dry-'));
+  for (const d of ['prompts', 'lib', 'services']) await mkdir(path.join(dest, d));
+  execFileSync('node', [new URL('./sync-brain.js', import.meta.url).pathname, '--brain-only'],
+    { env: { ...process.env, SPARK_DIR: dest }, encoding: 'utf8' });
+  eq((await readdir(path.join(dest, 'lib'))).length, 0, 'حالت پیش‌فرض فقط نگاه می‌کند');
+});
+
 // ── برچسب هر خانه: چهار تا، و هرکدام جای خودش ────────────────
 // از یک اجرای واقعی (farideh.gilaseh): «پیام» با برچسب fact آمد ولی متنش
 // وعده‌ای بود که در هیچ محتوایی نیامده بود، و «اقدام» با برچسب hypothesis —
@@ -1585,9 +1677,9 @@ tShell('شماره‌ی نسخه از git می‌آید، نه از فایلی �
 
 // ═══ گزارش ═══
 await Promise.all(pending);
-if (skippedShell.length)
-  console.log(`\n  ⓘ ${skippedShell.length} تستِ پوسته رد شد — این میزبان server.js مخزن vohu را ندارد:\n`
-    + skippedShell.map(n => `      · ${n}`).join('\n'));
+if (skippedHere.length)
+  console.log(`\n  ⓘ ${skippedHere.length} تست رد شد — این میزبان کپی است، نه مرجع:\n`
+    + skippedHere.map(s => `      · ${s.name}  ${'\x1b[2m'}(${s.why})${'\x1b[0m'}`).join('\n'));
 console.log(`\n  ${pass} قبول · ${fail} رد\n`);
 if (fail) {
   failures.forEach(f => console.log(`  ✗ ${f}\n`));
