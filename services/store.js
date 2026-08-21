@@ -19,6 +19,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { currentUser } from '../lib/userContext.js';
 
 /**
  * انبار کجاست — تنها جایی که این تصمیم گرفته می‌شود.
@@ -36,6 +37,25 @@ export function storeDir() {
 }
 
 /**
+ * پوشه‌ی همین کاربر: `.vohu/<user>/`.
+ *
+ * هرچه به یک کسب‌وکار مربوط است — اجرا، حافظه، تاریخچه‌ی استخراج، کارهای
+ * پس‌زمینه — زیر همین می‌نشیند. از همان اول این‌طور، نه بعداً: وقتی پنج تستر
+ * روی یک سرور باشند، «بعداً جدا می‌کنیم» یعنی یک بار داده قاطی می‌شود.
+ *
+ * storeDir() ریشه می‌ماند و دست‌نخورده — تست‌ها و VOHU_STORE_DIR به آن تکیه دارند.
+ */
+export function userDir() {
+  return path.join(storeDir(), currentUser());
+}
+
+/** پوشه را بساز اگر نیست. هر نویسنده‌ای از همین رد می‌شود. */
+export async function ensureDir(dir) {
+  if (!existsSync(dir)) await mkdir(dir, { recursive: true });
+  return dir;
+}
+
+/**
  * نوشتن اتمی: اول در فایل کناری، بعد rename.
  *
  * writeFile اتمی نیست. هر کسی که همان لحظه بخواند می‌تواند فایل نیمه‌نوشته
@@ -49,12 +69,12 @@ export async function writeJsonAtomic(file, data) {
   await rename(tmp, file);
 }
 
-function slug(url) {
+export function slug(url) {
   return String(url).replace(/^https?:\/\//, '').replace(/[^a-z0-9]+/gi, '-').slice(0, 60);
 }
 
 export async function loadRun(url) {
-  const file = path.join(storeDir(), `${slug(url)}.json`);
+  const file = path.join(userDir(), `${slug(url)}.json`);
   const run = existsSync(file)
     ? JSON.parse(await readFile(file, 'utf8'))
     : { url, stages: {}, createdAt: new Date().toISOString() };
@@ -69,8 +89,7 @@ export async function loadRun(url) {
 }
 
 export async function saveRun(run) {
-  const DIR = storeDir();
-  if (!existsSync(DIR)) await mkdir(DIR, { recursive: true });
+  const DIR = await ensureDir(userDir());
   run.updatedAt = new Date().toISOString();
   await writeJsonAtomic(path.join(DIR, `${slug(run.url)}.json`), run);
   return run;

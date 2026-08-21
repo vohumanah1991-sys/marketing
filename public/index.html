@@ -367,6 +367,9 @@ function restoredBar(){
 
 function paint(){
   if (!url && !S.needs) return start();
+  // سررسید که رسید، اول همین. بقیه‌ی صفحه‌ها منتظر می‌مانند — این تنها
+  // جایی است که حلقه بسته می‌شود و بدون آن هر دور از صفر شروع می‌کند.
+  if (S.followUp?.state === 'due') return followUp();
   if (S.state === 'low_confidence') return lowConf();
   if (S.needs === 'pageText')    return pageBlocked();
   if (S.needs === 'competitors') return competitors();
@@ -704,6 +707,60 @@ function measureBox(m){
   if (m.countable === false)
     h += `<div class="gate">${esc(m.blindSpot || 'نتیجه‌ی این اقدام با ابزارهای ما دیده نمی‌شود — باید خودت بشماری.')}</div>`;
   return h;
+}
+
+/**
+ * «چه شد؟» — دو هفته بعد از تأیید کارت.
+ *
+ * اگر اقدام کامنتی با کلیدواژه بود، دکمه‌ی شمارش خودکار می‌آید. هر حالت
+ * دیگری دستی پرسیده می‌شود و **عدد خالی، خالی می‌ماند** — صفر یعنی
+ * «شمردم و هیچ نبود» و آن ادعای دیگری است.
+ */
+function followUp(){
+  const f = S.followUp;
+  M.innerHTML = `<div class="day">دو هفته گذشت</div>
+  <h2>چه شد؟</h2>
+  <div class="card"><b>پیش‌بینی من این بود</b><div class="v">${esc(f.observable)}</div></div>
+  ${f.action?`<div class="card"><b>اقدامی که خواسته بودیم</b><div class="v">${esc(f.action)}</div></div>`:''}
+  ${f.metric?`<div class="card"><b>چه چیزی را می‌سنجیم</b><div class="v">${esc(f.metric)}</div>
+    <div class="sm" style="margin-top:6px">خط پایه: ${f.baseline?esc(f.baseline):'— (نداشتیم)'}</div></div>`:''}
+  ${f.blindSpot?`<div class="gate">${esc(f.blindSpot)}</div>`:''}
+
+  ${f.keyword?`<button class="g" onclick="countAuto()">خودم بشمارم — کامنت‌های «${esc(f.keyword)}»</button>
+    <div id="cnt" class="sm" style="margin-top:8px"></div>`
+   :`<p class="sm">این اقدام کلیدواژه‌ی مشخصی ندارد که خودم بشمارم، پس از خودت می‌پرسم.</p>`}
+
+  <label class="sm" style="display:block;margin-top:16px">چند تا شد؟ (اگر نمی‌دانی، خالی بگذار)</label>
+  <input id="fu_n" type="number" min="0" dir="ltr" style="text-align:left" placeholder="عدد">
+  <label class="sm">چه چیزی دیدی؟</label>
+  <textarea id="fu_t" placeholder="هرچه دیدی — حتی «هیچ اتفاقی نیفتاد»"></textarea>
+  <p class="sm">«جواب نداد» هم جواب است. همان‌قدر ثبت می‌شود که «جواب داد».</p>
+  <button onclick="closeLoop()">ثبت کن</button>
+  <button class="g" onclick="S.followUp=null;render()">بعداً</button>`;
+}
+
+async function countAuto(){
+  const box = $('#cnt'); if(!box) return;
+  box.textContent = 'دارم پیج را دوباره می‌خوانم…';
+  try{
+    const r = await (await fetch('/api/followup/count', {method:'POST',
+      headers:{'content-type':'application/json'}, body: JSON.stringify({url})})).json();
+    if (r.count == null) { box.textContent = 'نشد بشمارم — ' + (r.why||'دلیلش معلوم نیست') + '. دستی بنویس.'; return; }
+    box.textContent = `${r.count} کامنت منطبق در ${r.scanned} محتوا`;
+    const n = $('#fu_n'); if (n) n.value = r.count;
+  }catch(e){ box.textContent = 'نشد بشمارم: ' + e.message + '. دستی بنویس.'; }
+}
+
+function closeLoop(){
+  if (busy) return;
+  const raw = val('fu_n'), text = val('fu_t');
+  // عددِ نداده، null می‌ماند. صفرِ ساختگی، دور بعد را هم خراب می‌کند.
+  const obs = [];
+  if (raw !== '') obs.push({ what: S.followUp?.metric || 'شمارش', note: raw, how: 'counted' });
+  if (text)       obs.push({ what: 'آنچه کاربر دید', note: text, how: 'user_said' });
+  if (!obs.length){ alert('دست‌کم یکی را پر کن — عدد یا توضیح.'); return; }
+  spin('نتیجه را می‌خوانم و یاد می‌گیرم…', false);
+  api('/api/followup/close', { url, observations: obs, userAnswer: text || null });
 }
 
 function strategy(){

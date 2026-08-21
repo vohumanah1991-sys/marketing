@@ -16,6 +16,8 @@ import { check, timed, buildId } from './lib/selftest.js';
 import { startRun, getRun, advance, normalizeSource, restoredInfo, rankCandidates } from './lib/session.js';
 import { saveRun, storeDir } from './services/store.js';
 import { checkContent } from './lib/pipeline.js';
+import { followUpStatus, countComments, closeLoop } from './lib/followUp.js';
+import { runAsUser } from './lib/userContext.js';
 import { createJob, getJob, listJobs, registerHandler, markInterrupted } from './services/jobs.js';
 import { syncInstagram, loadState, resolveLimits } from './lib/igSync.js';
 import { analyzeItems } from './lib/igAnalyze.js';
@@ -60,6 +62,19 @@ app.use((req, res, next) => {
   next();
 });
 
+/**
+ * هر درخواست داخل context یک کاربر اجرا می‌شود، تا مسیرهای روی دیسک
+ * (`.vohu/<user>/…`) از همان اول جدا باشند.
+ *
+ * فعلاً احراز هویتی نیست و همه «default»اند. هدف این است که وقتی این مغز
+ * روی spark-saas سوار شود، فقط همین یک تابع عوض شود — نه هیچ‌کدام از
+ * جاهایی که فایل می‌خوانند یا می‌نویسند.
+ */
+app.use((req, _res, next) => {
+  const who = req.get('x-vohu-user') || process.env.VOHU_USER || null;
+  runAsUser(who, next);
+});
+
 app.use(express.static(path.join(here, 'public')));
 
 // خطای مدل نباید کل سرور را بخواباند
@@ -102,7 +117,9 @@ const view = r => ({
   engine:    r.run.engine || null,
   // اگر این جواب از انبار درآمده و همین حالا ساخته نشده، رابط باید بگویدش.
   // null یعنی تازه است و بنری لازم نیست.
-  restored:  restoredInfo(r.run, r.restoredAt || null)
+  restored:  restoredInfo(r.run, r.restoredAt || null),
+  // سررسید «چه شد؟» — رابط بر اساس همین صفحه را نشان می‌دهد
+  followUp:  r.run.followUp ? followUpStatus(r.run) : null
 });
 
 // شروع یا ادامه
@@ -211,6 +228,32 @@ app.post('/api/run/approve', guard(async (req, res) => {
   run.input.approved = true;
   await saveRun(run);
   res.json(view(await advance(run)));
+}));
+
+// ── نیمه‌ی دوم حلقه: «چه شد؟» ───────────────────────────────
+// وضعیت سررسید. هیچ فراخوان پولی اینجا زده نمی‌شود — فقط نگاه به اجرا.
+app.get('/api/followup', guard(async (req, res) => {
+  const run = await getRun(req.query.url);
+  res.json(followUpStatus(run));
+}));
+
+// شمارش خودکار — این یکی به Apify می‌زند، پس فقط با درخواست صریح کاربر.
+app.post('/api/followup/count', guard(async (req, res) => {
+  const run = await getRun(req.body.url);
+  res.json(await countComments(run));
+}));
+
+// بستن حلقه: مشاهده‌ها → عملکرد → یادگیری → حافظه‌ی کسب‌وکار
+app.post('/api/followup/close', guard(async (req, res) => {
+  const run = await getRun(req.body.url);
+  const out = await closeLoop(run, {
+    observations: req.body.observations || [],
+    userAnswer:   req.body.userAnswer || null,
+    userReason:   req.body.userReason || null
+  });
+  await saveRun(run);                       // answeredAt روی اجرا نشسته
+  res.json({ outcome: out.outcome, learning: out.learning,
+             campaignHistory: out.memory.campaignHistory.length });
 }));
 
 // دروازه‌ی شواهد — قبل از انتشار هر متنی

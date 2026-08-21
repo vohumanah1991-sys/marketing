@@ -15,9 +15,9 @@
 import { mkdir, readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { storeDir, writeJsonAtomic } from './store.js';
+import { userDir, writeJsonAtomic } from './store.js';
 
-const DIR = () => path.join(storeDir(), 'jobs');
+const DIR = () => path.join(userDir(), 'jobs');
 
 const queue    = [];
 const handlers = new Map();
