@@ -20,7 +20,7 @@ import * as VS from '../services/vohuService.js';
 import { faModelError, faModelHint, configuredProvider, activeEngine, callWithSchema } from '../services/vohuService.js';
 import { openaiEnabled, openaiModel, openaiBase, redactOpenAI, faOpenAIError,
          isReasoningModel, openaiRoute, noteDroppedReasoningEffort,
-         callOpenAISchema } from '../services/openai.js';
+         schemaIsStrict, readUsage, callOpenAISchema } from '../services/openai.js';
 
 let pass = 0, fail = 0;
 const failures = [];
@@ -871,6 +871,84 @@ t('مقدار بی‌معنا برای reasoning همان اول می‌ایست
   } catch (e) { msg = e.message; }
   ok(msg && msg.includes('خیلی-زیاد'), `باید بگوید چه مقداری غلط بود: ${msg}`);
   ok(msg.includes('high') && msg.includes('low'), `باید مقدارهای معتبر را بشمارد: ${msg}`);
+});
+
+t('نبودِ OPENAI_REASONING_EFFORT یعنی medium، نه استدلالِ خاموش', async () => {
+  const f = fakeOpenAI(RESPONSES_OK);
+  try {
+    await withEnv({ OPENAI_API_KEY: 'sk-t', OPENAI_BASE_URL: null, OPENAI_REASONING_EFFORT: null }, () =>
+      callOpenAISchema({ prompt: 'سلام', schema: SCHEMA, toolName: 'x', model: 'gpt-5-mini' }));
+  } finally { f.restore(); }
+
+  const [req] = f.seen;
+  eq(req.body.reasoning?.effort, 'medium', 'پیش‌فرض باید صریح فرستاده شود، نه سپرده به OpenAI');
+  eq(req.body.input, 'سلام', 'پرامپت همان متن است');
+  ok(!('reasoning_effort' in req.body), 'در /responses نامش reasoning.effort است، نه reasoning_effort');
+});
+
+t('پیش‌فرضِ medium روی مدل معمولی هشدار الکی نمی‌سازد', async () => {
+  // هشدار «اعمال نشد» فقط برای چیزی است که کاربر *صریح* خواسته. اگر پیش‌فرض هم
+  // مثل خواسته رفتار کند، هر تماس مدل معمولی یک خط هشدار می‌گیرد و لاگ کور می‌شود.
+  const warn = console.warn;
+  const lines = [];
+  console.warn = (...a) => lines.push(a.join(' '));
+  const f = fakeOpenAI(CHAT_OK);
+  try {
+    await withEnv({ OPENAI_API_KEY: 'sk-t', OPENAI_BASE_URL: null, OPENAI_REASONING_EFFORT: null }, () =>
+      callOpenAISchema({ prompt: 'x', schema: SCHEMA, toolName: 'x', model: 'gpt-4.1-بی‌هشدار' }));
+  } finally { f.restore(); console.warn = warn; }
+
+  eq(lines.length, 0, `کاربر چیزی نخواسته بود، پس هشداری هم نباید باشد: ${JSON.stringify(lines)}`);
+  ok(!('reasoning' in f.seen[0].body), 'و چیزی هم به مسیر chat نمی‌رود');
+});
+
+t('توکن استدلال شمرده می‌شود — هزینه کمتر از واقعیت نشان داده نشود', async () => {
+  const f = fakeOpenAI({
+    status: 'completed',
+    output: [{ type: 'function_call', name: 'x', arguments: '{"a":1}' }],
+    usage: { input_tokens: 11, output_tokens: 90, output_tokens_details: { reasoning_tokens: 70 } }
+  });
+  let r;
+  try {
+    r = await withEnv({ OPENAI_API_KEY: 'sk-t' }, () =>
+      callOpenAISchema({ prompt: 'x', schema: SCHEMA, toolName: 'x', model: 'gpt-5-mini' }));
+  } finally { f.restore(); }
+
+  eq(r.meta.reasoningTokens, 70, 'توکن استدلال باید در meta بیاید');
+  eq(r.meta.outputTokens, 90, 'output_tokens خودش شامل استدلال است — جمع‌کردن یعنی دوبار حساب‌کردن');
+
+  // درگاهی که output_tokens نمی‌دهد ولی استدلال را می‌شمارد: صفر نشان ندهیم
+  eq(readUsage({ output_tokens_details: { reasoning_tokens: 40 } }).outputTokens, 40);
+  eq(readUsage({ completion_tokens: 5, completion_tokens_details: { reasoning_tokens: 3 } }).reasoningTokens, 3,
+     'مسیر chat هم اگر شمرد، خوانده شود');
+  eq(readUsage(undefined).outputTokens, undefined, 'نبودِ usage نباید صفرِ ساختگی بسازد');
+});
+
+t('strict فقط روی اسکیمایی می‌رود که OpenAI می‌پذیردش', async () => {
+  const loose  = { type: 'object', required: ['a'], properties: { a: { type: 'integer' } } };
+  const strict = { type: 'object', additionalProperties: false, required: ['a', 'b'],
+                   properties: { a: { type: 'integer' },
+                                 b: { type: 'array', items: { type: 'object', additionalProperties: false,
+                                      required: ['c'], properties: { c: { type: 'string' } } } } } };
+  eq(schemaIsStrict(loose), false, 'بدون additionalProperties:false، strict یعنی ۴۰۰');
+  eq(schemaIsStrict({ ...strict, required: ['a'] }), false, 'required باید همه‌ی کلیدها را بشمارد');
+  eq(schemaIsStrict(strict), true);
+  eq(schemaIsStrict({ ...strict, properties: { ...strict.properties, b: { type: 'array',
+       items: { type: 'object', required: ['c'], properties: { c: { type: 'string' } } } } } }), false,
+     'شیء تودرتوی ناسازگار هم باید گیر بیفتد');
+
+  const sent = async (schema, model, reply) => {
+    const f = fakeOpenAI(reply);
+    try {
+      await withEnv({ OPENAI_API_KEY: 'sk-t' }, () =>
+        callOpenAISchema({ prompt: 'x', schema, toolName: 'x', model }));
+    } finally { f.restore(); }
+    return f.seen[0].body.tools[0];
+  };
+  const okReply = { status: 'completed', output: [{ type: 'function_call', name: 'x', arguments: '{"a":1,"b":[]}' }] };
+  eq((await sent(strict, 'gpt-5-mini', okReply)).strict, true, 'اسکیمای سازگار strict می‌گیرد');
+  eq((await sent(loose,  'gpt-5-mini', RESPONSES_OK)).strict, undefined, 'ناسازگار اصلاً نباید strict بفرستد');
+  eq((await sent(loose,  'gpt-4.1',    CHAT_OK)).function.strict, undefined, 'در مسیر chat هم همین قاعده');
 });
 
 t('هر پیام خطایی که کاربر را متوقف می‌کند، راه ادامه دارد', async () => {

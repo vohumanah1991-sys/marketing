@@ -14,6 +14,10 @@
  * هر دو مسیر همان `{ data, meta }` را برمی‌گردانند. بقیه‌ی زنجیره نباید
  * بفهمد کدام مسیر رفته است.
  *
+ * دلیل کل این دوراهی: /chat/completions اجازه نمی‌دهد reasoning_effort و tools
+ * با هم بروند، پس روی آن مسیر یا استدلال داری یا خروجی ساختاریافته. /responses
+ * هر دو را با هم می‌پذیرد.
+ *
  * قاعده‌های امنیتی — همان‌های Apify:
  *   · کلید فقط از process.env.OPENAI_API_KEY خوانده می‌شود.
  *   · فقط در هدر Authorization می‌رود، هرگز در query string.
@@ -46,6 +50,13 @@ export const openaiRoute = (model) =>
 const EFFORTS = ['none', 'minimal', 'low', 'medium', 'high'];
 
 /**
+ * وقتی OPENAI_REASONING_EFFORT تعریف نشده باشد، مدل استدلالی با همین می‌رود.
+ * صریح فرستاده می‌شود، نه سپرده به پیش‌فرض OpenAI — تا وقتی OpenAI روزی
+ * پیش‌فرضش را عوض کرد، خروجی این برنامه بی‌خبر عوض نشود.
+ */
+const DEFAULT_EFFORT = 'medium';
+
+/**
  * reasoning_effort دیگر دور ریخته نمی‌شود — روی مسیر /responses واقعاً فرستاده
  * می‌شود و مدل هم‌زمان استدلال و ابزار دارد.
  *
@@ -71,6 +82,32 @@ export function noteDroppedReasoningEffort(effort, model) {
     console.warn(line);
   }
   return line;
+}
+
+/**
+ * strict یعنی «خروجی دقیقاً همین اسکیما باشد» — ولی OpenAI فقط اسکیمایی را
+ * strict می‌پذیرد که هر شیئش additionalProperties:false داشته باشد و required
+ * تمام کلیدهایش را بشمارد. اسکیمای ناسازگار با strict:true یک ۴۰۰ انگلیسی
+ * می‌گیرد، نه خروجی بهتر.
+ *
+ * پس تصمیم را خود اسکیما می‌گیرد: سازگار بود، strict می‌رود؛ نبود، نمی‌رود و
+ * تماس مثل قبل کار می‌کند. اسکیماهای prompts/vohuPrompts.js امروز سازگار
+ * نیستند (نه additionalProperties دارند نه required کامل) — هر کدام که سازگار
+ * شود، از همین‌جا خودبه‌خود strict می‌گیرد.
+ */
+export function schemaIsStrict(node) {
+  if (!node || typeof node !== 'object') return true;
+  if (Array.isArray(node)) return node.every(schemaIsStrict);
+
+  if (node.properties && typeof node.properties === 'object') {
+    if (node.additionalProperties !== false) return false;
+    const keys = Object.keys(node.properties);
+    const req  = new Set(Array.isArray(node.required) ? node.required : []);
+    if (keys.some(k => !req.has(k))) return false;
+    if (!keys.every(k => schemaIsStrict(node.properties[k]))) return false;
+  }
+  return [node.items, node.anyOf, node.oneOf, node.allOf, node.$defs]
+    .every(child => child === undefined || schemaIsStrict(child));
 }
 
 /** فقط یعنی «کلید هست؟» — نه اینکه سرویس انتخاب‌شده کدام است. */
@@ -128,6 +165,31 @@ export function faOpenAIError(status, body, { timeoutMs, model, route } = {}) {
   return `OpenAI رد کرد (${status})${raw ? ' — ' + redactOpenAI(raw).slice(0, 200) : ''}`;
 }
 
+/**
+ * usage دو مسیر دو نام دارد (prompt/completion در chat، input/output در
+ * responses) ولی یک معنا. اینجا به یک شکل درمی‌آید.
+ *
+ * توکن استدلال جداگانه پول می‌گیرد و اگر شمرده نشود، هزینه کمتر از واقعیت
+ * نشان داده می‌شود. قرارداد خود OpenAI این است که output_tokens *شامل*
+ * توکن‌های استدلال است، پس جمع‌کردنشان دوبار حساب‌کردن می‌شود. دو کار می‌کنیم:
+ *   · reasoningTokens جدا برمی‌گردد تا معلوم باشد پول کجا رفت،
+ *   · و اگر درگاهی output_tokens نداد ولی استدلال را شمرد، همان مبنا می‌شود
+ *     تا خروجی بی‌هزینه به‌نظر نرسد.
+ */
+export function readUsage(u) {
+  u = u || {};
+  const reasoning = u.output_tokens_details?.reasoning_tokens
+                 ?? u.completion_tokens_details?.reasoning_tokens;
+  let output = u.completion_tokens ?? u.output_tokens;
+  if (output === undefined && reasoning !== undefined) output = reasoning;
+
+  return {
+    inputTokens:     u.prompt_tokens ?? u.input_tokens,
+    outputTokens:    output,
+    reasoningTokens: reasoning
+  };
+}
+
 /** یک POST با مهلت، با همان نگاشت خطای فارسی. مشترک بین دو مسیر. */
 async function postOpenAI(route, payload, { timeoutMs, model }) {
   const ctrl = new AbortController();
@@ -171,20 +233,29 @@ export async function callOpenAISchema({ prompt, schema, toolName = 'result', ma
   model = model || openaiModel();
   const t0 = Date.now();
 
-  const effort = String(reasoningEffort ?? process.env.OPENAI_REASONING_EFFORT ?? '').trim();
-  if (effort && !EFFORTS.includes(effort))
-    throw new Error(`OPENAI_REASONING_EFFORT=«${effort}» معتبر نیست — یکی از ${EFFORTS.join('، ')} را بگذار`);
+  // «چه خواسته شده» و «با چه می‌رویم» دو چیزند: نبودِ OPENAI_REASONING_EFFORT
+  // یعنی medium، ولی نباید مثل یک خواسته‌ی صریح رفتار شود — وگرنه هر تماسِ مدل
+  // معمولی یک هشدارِ «اعمال نشد» می‌گیرد برای چیزی که کاربر اصلاً نخواسته بود.
+  const asked = String(reasoningEffort ?? process.env.OPENAI_REASONING_EFFORT ?? '').trim();
+  if (asked && !EFFORTS.includes(asked))
+    throw new Error(`OPENAI_REASONING_EFFORT=«${asked}» معتبر نیست — یکی از ${EFFORTS.join('، ')} را بگذار`);
+  const effort = asked || DEFAULT_EFFORT;
 
   const route = openaiRoute(model);
   const description = 'خروجی ساختاریافته را با این تابع برگردان.';
 
   const { body, args } = route === '/responses'
     ? await callResponses({ prompt, schema, toolName, description, maxTokens, timeoutMs, model, effort })
-    : await callChat({ prompt, schema, toolName, description, maxTokens, timeoutMs, model, effort });
+    : await callChat({ prompt, schema, toolName, description, maxTokens, timeoutMs, model, asked });
 
+  // arguments یک *رشته‌ی* JSON است، نه شیء — باید پارس شود. (بعضی درگاه‌های
+  // واسط شیء می‌دهند؛ آن هم رد نمی‌شود، ولی قاعده همان رشته است.)
   let data;
-  try { data = JSON.parse(args); }
-  catch { throw new Error('خروجی OpenAI JSON معتبر نبود'); }
+  if (args && typeof args === 'object') data = args;
+  else {
+    try { data = JSON.parse(args); }
+    catch { throw new Error('خروجی OpenAI JSON معتبر نبود'); }
+  }
 
   // اسکیما را خود کد چک می‌کند، نه پرامپت — قاعده‌ی ۲.
   // فقط فیلدهای اجباریِ سطح اول؛ نبودشان یعنی خروجی به درد بقیه‌ی زنجیره نمی‌خورد.
@@ -193,14 +264,15 @@ export async function callOpenAISchema({ prompt, schema, toolName = 'result', ma
     throw new Error(`خروجی OpenAI فیلدهای اجباری را ندارد: ${missing.join(', ')}`);
 
   // شکل meta در هر دو مسیر یکی است — بقیه‌ی زنجیره نباید بفهمد از کدام سر آمده.
+  // reasoningTokens روی مسیر chat همیشه undefined است، ولی کلیدش هست تا شکل
+  // meta بین دو مسیر یکی بماند.
   return {
     data,
     meta: {
       model,
       provider: 'openai',
       ms: Date.now() - t0,
-      inputTokens:  body?.usage?.prompt_tokens ?? body?.usage?.input_tokens,
-      outputTokens: body?.usage?.completion_tokens ?? body?.usage?.output_tokens
+      ...readUsage(body?.usage)
     }
   };
 }
@@ -208,15 +280,23 @@ export async function callOpenAISchema({ prompt, schema, toolName = 'result', ma
 /**
  * مسیر مدل استدلالی: /responses.
  * اینجا reasoning و function tools با هم می‌آیند — دلیل کل این جابه‌جایی همین است.
+ *
+ * شکل درخواست با chat فرق دارد و هر بار هم فراموش می‌شود: ابزار تخت است
+ * (name کنار type)، tool_choice هم تخت، سقف توکن max_output_tokens، و
+ * arguments یک رشته‌ی JSON برمی‌گردد نه شیء.
  */
 async function callResponses({ prompt, schema, toolName, description, maxTokens, timeoutMs, model, effort }) {
+  const strict = schemaIsStrict(schema);
+
   const body = await postOpenAI('/responses', {
     model,
-    input: [{ role: 'user', content: prompt }],
+    input: prompt,
     max_output_tokens: maxTokens,
     // در /responses ابزار تخت است: name کنار type، نه داخل function.
-    tools: [{ type: 'function', name: toolName, description, parameters: schema }],
+    tools: [{ type: 'function', name: toolName, description, parameters: schema,
+              ...(strict ? { strict: true } : {}) }],
     tool_choice: { type: 'function', name: toolName },
+    // همین یک خط دلیل کل این مسیر است: استدلال و ابزار با هم.
     ...(effort ? { reasoning: { effort } } : {})
   }, { timeoutMs, model });
 
@@ -238,9 +318,9 @@ async function callResponses({ prompt, schema, toolName, description, maxTokens,
 }
 
 /** مسیر مدل معمولی: همان chat/completions قبلی، بی‌تغییر. */
-async function callChat({ prompt, schema, toolName, description, maxTokens, timeoutMs, model, effort }) {
-  // reasoning اینجا جا ندارد؛ اگر خواسته شده بود، بی‌صدا نمی‌افتد.
-  noteDroppedReasoningEffort(effort, model);
+async function callChat({ prompt, schema, toolName, description, maxTokens, timeoutMs, model, asked }) {
+  // reasoning اینجا جا ندارد؛ اگر صریح خواسته شده بود، بی‌صدا نمی‌افتد.
+  noteDroppedReasoningEffort(asked, model);
 
   const body = await postOpenAI('/chat/completions', {
     model,
@@ -248,7 +328,8 @@ async function callChat({ prompt, schema, toolName, description, maxTokens, time
     messages: [{ role: 'user', content: prompt }],
     tools: [{
       type: 'function',
-      function: { name: toolName, description, parameters: schema }
+      function: { name: toolName, description, parameters: schema,
+                  ...(schemaIsStrict(schema) ? { strict: true } : {}) }
     }],
     tool_choice: { type: 'function', function: { name: toolName } }
   }, { timeoutMs, model });
