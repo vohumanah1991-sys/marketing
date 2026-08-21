@@ -51,8 +51,8 @@ const BRAIN = [
 const COMPANIONS = [
   'scripts/test.js', 'scripts/test-once.js', 'scripts/test-loop.js',
   'public/index.html',
-  ...['business_knowledge', 'campaign', 'first_insight', 'learning', 'market',
-      'performance', 'playing_field', 'questions', 'strategy_card']
+  ...['business_knowledge', 'campaign', 'content_analysis', 'first_insight', 'learning',
+      'market', 'performance', 'playing_field', 'questions', 'strategy_card']
       .map(n => `fixtures/${n}.json`),
   'fixtures/apify-posts.json', 'fixtures/apify-reels.json', 'fixtures/page.txt'
 ];
