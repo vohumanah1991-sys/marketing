@@ -19,7 +19,7 @@ process.env.VOHU_FIXTURES = './fixtures';
 process.env.VOHU_MODEL    = 'dry';
 process.env.APIFY_TOKEN   = 'apify_api_FAKE_FOR_TEST';
 
-import { mkdtempSync, existsSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -30,7 +30,8 @@ const eq = (a, b, m) => ok(a === b, `${m} — انتظار ${JSON.stringify(b)}�
 process.env.VOHU_STORE_DIR = mkdtempSync(path.join(tmpdir(), 'vohu-loop-'));
 
 const { startRun, advance } = await import('../lib/session.js');
-const { loadMemory, memoryFile } = await import('../services/memory.js');
+const { loadMemory, memoryExists } = await import('../services/memory.js');
+const { userDir } = await import('../services/store.js');
 const { closeLoop, followUpStatus, actionKeyword, startFollowUp } = await import('../lib/followUp.js');
 const { runAsUser, currentUser } = await import('../lib/userContext.js');
 const { threadFatigue } = await import('../prompts/vohuPrompts.js');
@@ -83,8 +84,8 @@ eq(due.state, 'due', 'بعد از ۱۴ روز، سررسید رسیده است')
 
 // ── مسیرها زیر کاربر ──
 await runAsUser('tester-1', async () => {
-  ok(memoryFile(URL_).includes(`${path.sep}tester-1${path.sep}`),
-     `حافظه زیر پوشه‌ی کاربر است: ${memoryFile(URL_)}`);
+  ok(userDir().endsWith(`${path.sep}tester-1`),
+     `مسیرهای این کاربر زیر پوشه‌ی خودش است: ${userDir()}`);
 });
 
 console.log('\n── بستن حلقه ──');
@@ -129,7 +130,7 @@ ok(!fat.tired, 'با یک بار، هنوز خسته نیست — ولی دیگ�
 await runAsUser('tester-1', async () => {
   const fresh = await startRun({ url: URL_, note: 'از نو' });
   ok(!fresh.stages.knowledge, 'اجرای تازه واقعاً تازه است');
-  ok(existsSync(memoryFile(URL_)), 'ولی حافظه‌ی کسب‌وکار سر جایش ماند');
+  ok(await memoryExists(URL_), 'ولی حافظه‌ی کسب‌وکار سر جایش ماند');
   eq((await loadMemory(URL_)).campaignHistory.length, 1, 'و تاریخچه‌اش دست‌نخورده است');
 });
 

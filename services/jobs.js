@@ -12,12 +12,9 @@
  * «interrupted» علامت می‌خورد — نه اینکه وانمود شود تمام شده.
  */
 
-import { mkdir, readFile, readdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import path from 'node:path';
-import { userDir, writeJsonAtomic } from './store.js';
-
-const DIR = () => path.join(userDir(), 'jobs');
+// هیچ fs مستقیمی اینجا نیست: انبار پشت readDoc/writeDoc/listDocs است تا
+// همین فایل عیناً روی هر انباری (فایل یا SQLite) کار کند.
+import { readDoc, writeDoc, listDocs } from './store.js';
 
 const queue    = [];
 const handlers = new Map();
@@ -26,9 +23,8 @@ let running    = false;
 export function registerHandler(type, fn) { handlers.set(type, fn); }
 
 async function persist(job) {
-  if (!existsSync(DIR())) await mkdir(DIR(), { recursive: true });
   const { _resolve, ...clean } = job;
-  await writeJsonAtomic(path.join(DIR(), `${job.id}.json`), clean);
+  await writeDoc('job', job.id, clean);
 }
 
 export async function createJob(type, payload = {}) {
@@ -49,19 +45,12 @@ export async function createJob(type, payload = {}) {
 export async function getJob(id) {
   const live = queue.find(j => j.id === id);
   if (live) return live;
-  const f = path.join(DIR(), `${id}.json`);
-  if (!existsSync(f)) return null;
-  return JSON.parse(await readFile(f, 'utf8'));
+  return readDoc('job', id);
 }
 
 export async function listJobs({ limit = 20 } = {}) {
-  if (!existsSync(DIR())) return [];
-  const files = (await readdir(DIR())).filter(f => f.endsWith('.json'));
-  // یک فایل خراب نباید کل فهرست را بیندازد — رد می‌شود، نه اینکه ۵۰۰ بدهد
-  const all = (await Promise.all(files.map(async f => {
-    try { return JSON.parse(await readFile(path.join(DIR(), f), 'utf8')); }
-    catch { return null; }
-  }))).filter(x => x && x.createdAt);
+  // سندِ خراب را خود listDocs رد می‌کند — یکی نباید کل فهرست را بیندازد
+  const all = (await listDocs('job')).filter(x => x && x.createdAt);
   return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit)
             .map(({ result, ...rest }) => ({ ...rest, hasResult: Boolean(result) }));
 }
@@ -101,16 +90,13 @@ async function tick() {
 
 /** موقع بالا آمدن: کارهایی که وسط کار قطع شده‌اند را صادقانه علامت بزن. */
 export async function markInterrupted() {
-  if (!existsSync(DIR())) return 0;
   let n = 0;
-  for (const f of (await readdir(DIR())).filter(x => x.endsWith('.json'))) {
-    const p = path.join(DIR(), f);
-    const j = JSON.parse(await readFile(p, 'utf8'));
+  for (const j of await listDocs('job')) {
     if (j.status === 'running' || j.status === 'queued') {
       j.status = 'interrupted';
       j.error  = 'سرور وسط کار ری‌استارت شد';
       j.finishedAt = new Date().toISOString();
-      await writeJsonAtomic(p, j);
+      await writeDoc('job', j.id, j);
       n++;
     }
   }
