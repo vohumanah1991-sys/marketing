@@ -14,7 +14,7 @@ import { apifyEnabled, classifyInstagramUrl, redact } from '../services/apify.js
 import { itemsToText, contentType, extractTags, readTranscript, buildContentItem, itemToText } from '../lib/instagram.js';
 import { resolveLimits } from '../lib/igSync.js';
 import { loadRun } from '../services/store.js';
-import { costOf } from '../lib/session.js';
+import { costOf, restoredInfo } from '../lib/session.js';
 import { isRealText, textResult, dedupeTexts } from '../services/media.js';
 import * as VS from '../services/vohuService.js';
 import { faModelError, faModelHint, configuredProvider, activeEngine, callWithSchema } from '../services/vohuService.js';
@@ -977,6 +977,127 @@ t('strict فقط روی اسکیمایی می‌رود که OpenAI می‌پذی
   eq((await sent(strict, 'gpt-5-mini', okReply)).strict, true, 'اسکیمای سازگار strict می‌گیرد');
   eq((await sent(loose,  'gpt-5-mini', RESPONSES_OK)).strict, undefined, 'ناسازگار اصلاً نباید strict بفرستد');
   eq((await sent(loose,  'gpt-4.1',    CHAT_OK)).function.strict, undefined, 'در مسیر chat هم همین قاعده');
+});
+
+// ── اجرای ذخیره‌شده نباید خودش را نتیجه‌ی همین حالا جا بزند ───
+// سه بار کاربر خروجی چند روز پیش را نتیجه‌ی تازه گرفت و تنها راهش
+// پاک‌کردن دستی .vohu بود.
+
+const STORED = {
+  url: 'x.com', updatedAt: '2026-08-18T10:00:00Z', engine: { provider: 'openai', model: 'gpt-5-mini' },
+  stages: {
+    condensed: 3,                                     // مرحله‌ای که شیء نیست — نباید بترکد
+    insight:  { producedBy: { provider: 'openai', model: 'gpt-5-mini', at: '2026-08-18T09:00:00Z' } },
+    strategy: { producedBy: { provider: 'openai', model: 'gpt-5-mini', at: '2026-08-18T10:00:00Z' } }
+  }
+};
+
+t('اجرای تازه بنر «قدیمی است» نمی‌گیرد', () => {
+  eq(restoredInfo(STORED, null), null, 'وقتی همین حالا ساخته شده، بنری در کار نیست');
+  eq(restoredInfo(null, '2026-08-18T10:00:00Z'), null, 'بدون اجرا هم چیزی ادعا نمی‌شود');
+});
+
+t('اجرای ذخیره‌شده تاریخ و سازنده‌اش را می‌گوید', () => {
+  withEnv({ VOHU_PROVIDER: 'openai', OPENAI_MODEL: 'gpt-5-mini' }, () => {
+    const r = restoredInfo(STORED, STORED.updatedAt);
+    ok(r, 'باید بنر بدهد');
+    eq(r.at, '2026-08-18T10:00:00Z', 'تاریخ از تازه‌ترین مهر می‌آید، نه از قدیمی‌ترین');
+    eq(r.provider, 'openai');
+    eq(r.model, 'gpt-5-mini');
+    eq(r.mismatch, null, 'وقتی سرویس فعلی همان است، هشدار اضافه نباید بدهد');
+  });
+});
+
+t('سرویس یا مدلِ عوض‌شده صریح گفته می‌شود، نه بی‌سروصدا', () => {
+  withEnv({ VOHU_PROVIDER: 'anthropic', VOHU_MODEL: 'claude-sonnet-5' }, () => {
+    const r = restoredInfo(STORED, STORED.updatedAt);
+    eq(r.mismatch?.provider, 'anthropic', 'باید سرویس فعلی را نام ببرد');
+    eq(r.mismatch?.model, 'claude-sonnet-5', 'و مدل فعلی را');
+    eq(r.provider, 'openai', 'و سازنده‌ی واقعی هم باید بماند');
+  });
+  // همان سرویس، مدل دیگر — این هم فرق است
+  withEnv({ VOHU_PROVIDER: 'openai', OPENAI_MODEL: 'gpt-4.1' }, () => {
+    eq(restoredInfo(STORED, STORED.updatedAt).mismatch?.model, 'gpt-4.1');
+  });
+});
+
+t('طرفِ نامعلوم «فرق دارد» حساب نمی‌شود', () => {
+  // مدل فعلی که تعریف نشده، دلیل نمی‌شود بگوییم مدل عوض شده — قاعده‌ی ۶
+  withEnv({ VOHU_PROVIDER: 'anthropic', VOHU_MODEL: null }, () => {
+    const bare = { url: 'x', stages: { s: { producedBy: { provider: 'anthropic', model: 'claude-sonnet-5',
+                                                          at: '2026-08-18T10:00:00Z' } } } };
+    eq(restoredInfo(bare, '2026-08-18T10:00:00Z').mismatch, null, 'مدلِ نامعلوم ادعای فرق نمی‌سازد');
+  });
+  // اجرای بی‌مهر: هنوز چیزی ساخته نشده، پس ادعای سازنده هم نیست
+  withEnv({ VOHU_PROVIDER: 'anthropic', VOHU_MODEL: 'claude-sonnet-5' }, () => {
+    const r = restoredInfo({ url: 'x', stages: {} }, '2026-08-18T10:00:00Z');
+    eq(r.provider, null, 'بدون مهر، سازنده ساخته نمی‌شود');
+    eq(r.at, '2026-08-18T10:00:00Z', 'ولی تاریخ ذخیره را دارد');
+    eq(r.mismatch, null);
+  });
+});
+
+t('«شروع از نو» در هدر است، در همه‌ی حالت‌ها — نه فقط در صفحه‌ی خطا', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ui = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+
+  const header = ui.match(/<header>[\s\S]*?<\/header>/);
+  ok(header, 'هدر پیدا نشد');
+  ok(header[0].includes('freshStart()'), 'دکمه باید در خود هدر باشد تا همه‌ی صفحه‌ها آن را داشته باشند');
+
+  // بنر «این نتیجه از انبار درآمده» و راه بیرون‌آمدنش
+  ok(/function restoredBar\(/.test(ui), 'بنر باید تعریف شده باشد');
+  ok(/function render\([\s\S]{0,400}restoredBar\(\)/.test(ui),
+     'بنر باید بعد از هر رسم بیاید، وگرنه فقط در بعضی صفحه‌ها دیده می‌شود');
+  ok(/function restoredBar\(\)[\s\S]*?S\.restored/.test(ui), 'تصمیمش با داده‌ی سرور است، نه حدس مرورگر');
+
+  // منابع اجرا نباید با «شروع از نو» بی‌صدا بیفتند
+  const fresh = ui.match(/function freshStart\(\)[\s\S]*?\n}/);
+  ok(fresh, 'freshStart پیدا نشد');
+  ok(fresh[0].includes("instagram: pick('instagram')"),
+     'شروع از نو باید همان منابع را دوباره بفرستد، نه فقط url');
+  ok(fresh[0].includes('fresh:true'), 'و باید واقعاً اجرای تازه بسازد');
+});
+
+t('بنر واقعاً رسم می‌شود — و وقتی مدل عوض شده، صریح می‌گوید', async () => {
+  // رسم واقعی، نه فقط جست‌وجوی رشته: یک اشتباه در تمپلیت با regex پیدا نمی‌شود
+  // ولی روی صفحه‌ی کاربر خودش را نشان می‌دهد.
+  const { readFile } = await import('node:fs/promises');
+  const ui = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  const grab = n => (ui.match(new RegExp('function ' + n + '\\([\\s\\S]*?\\n}')) || [])[0];
+  const PARTS = ['faNum', 'dayFa', 'agoFa', 'restoredBar'];
+  for (const n of PARTS) ok(grab(n), `${n} پیدا نشد`);
+
+  const draw = new Function('S', 'M', `
+    const esc = s => String(s??'').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+    ${PARTS.map(grab).join('\n')}
+    restoredBar(); return M.html;`);
+  const paint = restored => {
+    const M = { html: '', insertAdjacentHTML(_, h) { this.html += h; } };
+    draw({ restored }, M);
+    return M.html;
+  };
+
+  eq(paint(null), '', 'اجرای تازه هیچ بنری نمی‌گیرد');
+
+  const fresh3h = paint({ at: new Date(Date.now() - 3 * 3600e3).toISOString(),
+                          provider: 'openai', model: 'gpt-5-mini', mismatch: null });
+  ok(fresh3h.includes('openai/gpt-5-mini'), `سازنده باید در بنر باشد: ${fresh3h}`);
+  ok(fresh3h.includes('۳ ساعت پیش'), `چقدر پیش، با رقم فارسی کنار تاریخ فارسی: ${fresh3h}`);
+  ok(fresh3h.includes('freshStart()'), 'بنر بدون راه ادامه، همان بن‌بست است');
+  ok(!fresh3h.includes('undefined') && !fresh3h.includes('null'), `نشتِ مقدار خالی: ${fresh3h}`);
+  ok(!/class="gate"/.test(fresh3h), 'وقتی فرقی نیست، هشدار قرمز هم نباید باشد');
+
+  const changed = paint({ at: '2026-08-18T10:00:00Z', provider: 'openai', model: 'gpt-5-mini',
+                          mismatch: { provider: 'anthropic', model: 'claude-sonnet-5' } });
+  ok(changed.includes('openai/gpt-5-mini') && changed.includes('anthropic/claude-sonnet-5'),
+     `هر دو طرف باید نام برده شوند: ${changed}`);
+  ok(/class="gate"/.test(changed), 'فرقِ مدل باید دیده شود، نه اینکه در متن گم شود');
+  ok(changed.includes('مدل قبلی'), 'باید بگوید آنچه می‌بینی خروجی مدل قبلی است');
+
+  // تاریخِ خراب نباید بنر را بترکاند یا «Invalid Date» نشان دهد
+  const bad = paint({ at: 'نه-تاریخ', provider: null, model: null, mismatch: null });
+  ok(bad.includes('freshStart()') && !/Invalid|NaN|undefined/.test(bad), `تاریخ خراب: ${bad}`);
 });
 
 t('هر پیام خطایی که کاربر را متوقف می‌کند، راه ادامه دارد', async () => {

@@ -13,7 +13,7 @@ import express from 'express';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { check, timed, buildId } from './lib/selftest.js';
-import { startRun, getRun, advance, normalizeSource } from './lib/session.js';
+import { startRun, getRun, advance, normalizeSource, restoredInfo } from './lib/session.js';
 import { saveRun, storeDir } from './services/store.js';
 import { checkContent } from './lib/pipeline.js';
 import { createJob, getJob, listJobs, registerHandler, markInterrupted } from './services/jobs.js';
@@ -72,6 +72,9 @@ const guard = fn => (req, res) => fn(req, res).catch(e => {
 
 const view = r => ({
   url: r.run.url, needs: r.needs, state: r.state, stages: r.stages,
+  // یک خطی که کاربر نوشته بود. رابط با «شروع از نو» پسش می‌فرستد —
+  // بدون این، اجرای تازه همان توضیح را از دست می‌داد.
+  note:      r.run.note || null,
   page:      r.run.stages.page ? { ok: r.run.stages.page.ok,
                                    sources: r.run.stages.page.sources || [],
                                    readCount: r.run.stages.page.readCount ?? null,
@@ -96,7 +99,10 @@ const view = r => ({
   condensed: r.run.stages.condensed || 0,
   usage:     r.run.usage || null,
   // سرویس قفل‌شده‌ی این اجرا — تا در رابط معلوم باشد با چه چیزی ساخته می‌شود
-  engine:    r.run.engine || null
+  engine:    r.run.engine || null,
+  // اگر این جواب از انبار درآمده و همین حالا ساخته نشده، رابط باید بگویدش.
+  // null یعنی تازه است و بنری لازم نیست.
+  restored:  restoredInfo(r.run, r.restoredAt || null)
 });
 
 // شروع یا ادامه
@@ -115,6 +121,10 @@ app.post('/api/run', guard(async (req, res) => {
   // شاهدی می‌نشیند که دیگر وجود ندارد. قاعده‌ی ۴ این را نمی‌پذیرد.
   const refetch = Boolean(req.body.refetch);
   let run = (fresh || refetch) ? await startRun({ url, note }) : await getRun(url);
+  // updatedAt فقط روی اجرایی هست که قبلاً ذخیره شده — یعنی همین یک خط
+  // جواب «این از انبار درآمد یا حالا ساخته شد؟» است. باید *قبل* از advance
+  // خوانده شود، چون advance خودش ذخیره می‌کند و مهرش را تازه می‌کند.
+  const restoredAt = (fresh || refetch) ? null : (run.updatedAt || null);
   run.stages = run.stages || {};
   run.input  = run.input  || {};
   if (note && !run.note) run.note = note;
@@ -128,7 +138,7 @@ app.post('/api/run', guard(async (req, res) => {
     if (Array.isArray(sources)) extra.push(...sources.map(x => String(x || '').trim()).filter(Boolean));
     run.input.sources = [...new Set(extra)].slice(0, 5);
   }
-  res.json(view(await advance(run)));
+  res.json(view({ ...await advance(run), restoredAt }));
 }));
 
 // پیشرفت زنده — مرورگر هر چند ثانیه می‌پرسد «الان کجایی؟»
@@ -154,7 +164,9 @@ app.get('/api/run/progress', guard(async (req, res) => {
 // وضعیت فعلی، بدون اجرای چیزی
 app.get('/api/run', guard(async (req, res) => {
   const run = await getRun(req.query.url);
-  res.json(view({ run, needs: null, state: 'loaded', stages: Object.keys(run.stages || {}) }));
+  // این سر اصلاً چیزی نمی‌سازد — هرچه برمی‌گرداند از انبار است.
+  res.json(view({ run, needs: null, state: 'loaded', stages: Object.keys(run.stages || {}),
+                  restoredAt: run.updatedAt || run.createdAt || null }));
 }));
 
 // رقبا
