@@ -19,7 +19,8 @@ import { isRealText, textResult, dedupeTexts } from '../services/media.js';
 import * as VS from '../services/vohuService.js';
 import { faModelError, faModelHint, configuredProvider, activeEngine, callWithSchema } from '../services/vohuService.js';
 import { openaiEnabled, openaiModel, openaiBase, redactOpenAI, faOpenAIError,
-         isReasoningModel, noteDroppedReasoningEffort, callOpenAISchema } from '../services/openai.js';
+         isReasoningModel, openaiRoute, noteDroppedReasoningEffort,
+         callOpenAISchema } from '../services/openai.js';
 
 let pass = 0, fail = 0;
 const failures = [];
@@ -716,39 +717,160 @@ t('مدل OpenAI قیمت ساختگی نمی‌گیرد', () => {
   ok(costOf('claude-sonnet-5', 1e6, 0) > 0, 'قیمت مدل شناخته‌شده باید حساب شود');
 });
 
-t('reasoning_effort هرگز داخل بدنه‌ی درخواست نمی‌رود', async () => {
+// ── دو مسیر، یک قرارداد ─────────────────────────────────────
+// مدل استدلالی از /responses می‌رود تا هم‌زمان reasoning و ابزار داشته باشد؛
+// مدل معمولی همان chat/completions. تصمیم را نام مدل می‌گیرد، نه یک متغیر جدا.
+
+// یک OpenAI قلابی: می‌گوید چه چیزی به کجا فرستاده شد، بدون شبکه.
+const fakeOpenAI = (reply) => {
+  const seen = [];
   const real = globalThis.fetch;
-  let sent = null;
-  globalThis.fetch = async (_url, opt) => {
-    sent = JSON.parse(opt.body);
-    return { ok: true, status: 200, text: async () => JSON.stringify({
-      choices: [{ message: { tool_calls: [{ function: { arguments: '{"a":1}' } }] } }] }) };
+  globalThis.fetch = async (url, opt) => {
+    seen.push({ url: String(url), body: JSON.parse(opt.body), headers: opt.headers });
+    return { ok: true, status: 200, text: async () => JSON.stringify(reply) };
   };
+  return { seen, restore: () => { globalThis.fetch = real; } };
+};
+
+const RESPONSES_OK = {
+  status: 'completed',
+  output: [{ type: 'reasoning', summary: [] },
+           { type: 'function_call', name: 'x', arguments: '{"a":1}' }],
+  usage: { input_tokens: 11, output_tokens: 22 }
+};
+const CHAT_OK = {
+  choices: [{ message: { tool_calls: [{ function: { arguments: '{"a":1}' } }] } }],
+  usage: { prompt_tokens: 11, completion_tokens: 22 }
+};
+const SCHEMA = { type: 'object', required: ['a'], properties: { a: { type: 'integer' } } };
+
+t('مدل استدلالی به /responses می‌رود و reasoning همراهش می‌ماند', async () => {
+  eq(openaiRoute('gpt-5-mini'), '/responses');
+  eq(openaiRoute('o3'), '/responses');
+  eq(openaiRoute('gpt-4.1'), '/chat/completions');
+
+  const f = fakeOpenAI(RESPONSES_OK);
+  let out;
   try {
-    await withEnv({ OPENAI_API_KEY: 'sk-t', OPENAI_REASONING_EFFORT: 'high' }, () =>
-      callOpenAISchema({ prompt: 'x', schema: { type: 'object', required: ['a'], properties: {} },
-                         toolName: 'x', model: 'gpt-5-mini' }));
-  } finally { globalThis.fetch = real; }
-  ok(sent, 'درخواست باید ساخته شده باشد');
-  ok(!('reasoning_effort' in sent), `reasoning_effort نباید فرستاده شود: ${JSON.stringify(sent)}`);
-  ok(sent.tools && sent.tool_choice, 'مسیر باید ابزارمحور بماند');
+    out = await withEnv({ OPENAI_API_KEY: 'sk-t', OPENAI_BASE_URL: null, OPENAI_REASONING_EFFORT: 'high' }, () =>
+      callOpenAISchema({ prompt: 'x', schema: SCHEMA, toolName: 'x', model: 'gpt-5-mini' }));
+  } finally { f.restore(); }
+
+  const [req] = f.seen;
+  eq(req.url, 'https://api.openai.com/v1/responses', 'مدل استدلالی باید از /responses برود');
+  eq(req.body.reasoning?.effort, 'high', 'reasoning_effort دیگر دور ریخته نمی‌شود');
+  ok(req.body.tools?.[0]?.name === 'x' && req.body.tools[0].type === 'function',
+     `ابزار در /responses تخت است: ${JSON.stringify(req.body.tools)}`);
+  eq(req.body.tool_choice?.name, 'x', 'ابزار همچنان اجباری است');
+  eq(req.body.max_output_tokens, 8000, 'سقف توکن در /responses نام دیگری دارد');
+  ok(!('max_completion_tokens' in req.body), 'کلید مسیر chat نباید اینجا بیاید');
+  eq(out.data.a, 1);
 });
 
-t('تلاش برای reasoning_effort بی‌سروصدا نمی‌افتد — یک خط لاگ می‌شود', () => {
+t('مدل معمولی همان chat/completions می‌ماند و reasoning داخلش نمی‌رود', async () => {
+  const f = fakeOpenAI(CHAT_OK);
+  try {
+    await withEnv({ OPENAI_API_KEY: 'sk-t', OPENAI_BASE_URL: null, OPENAI_REASONING_EFFORT: 'high' }, () =>
+      callOpenAISchema({ prompt: 'x', schema: SCHEMA, toolName: 'x', model: 'gpt-4.1' }));
+  } finally { f.restore(); }
+
+  const [req] = f.seen;
+  eq(req.url, 'https://api.openai.com/v1/chat/completions', 'مدل معمولی نباید به /responses برود');
+  ok(!('reasoning' in req.body) && !('reasoning_effort' in req.body),
+     `این پارامتر در مسیر chat جا ندارد: ${JSON.stringify(req.body)}`);
+  ok(req.body.tools?.[0]?.function?.name === 'x', 'ابزار در chat تودرتو است');
+  eq(req.body.tool_choice?.function?.name, 'x', 'ابزار همچنان اجباری است');
+});
+
+t('خروجی هر دو مسیر دقیقاً یک شکل است — بقیه‌ی زنجیره نباید بفهمد', async () => {
+  const run = async (model, reply) => {
+    const f = fakeOpenAI(reply);
+    try {
+      return await withEnv({ OPENAI_API_KEY: 'sk-t', OPENAI_BASE_URL: null, OPENAI_REASONING_EFFORT: null }, () =>
+        callOpenAISchema({ prompt: 'x', schema: SCHEMA, toolName: 'x', model }));
+    } finally { f.restore(); }
+  };
+  const r1 = await run('gpt-5-mini', RESPONSES_OK);
+  const r2 = await run('gpt-4.1', CHAT_OK);
+
+  eq(JSON.stringify(Object.keys(r1.meta).sort()), JSON.stringify(Object.keys(r2.meta).sort()),
+     'کلیدهای meta باید یکی باشند');
+  eq(JSON.stringify(r1.data), JSON.stringify(r2.data), 'data باید همان شکل باشد');
+  for (const r of [r1, r2]) {
+    eq(r.meta.provider, 'openai');
+    eq(r.meta.inputTokens, 11, 'شمارش توکن ورودی در هر دو مسیر خوانده شود');
+    eq(r.meta.outputTokens, 22, 'شمارش توکن خروجی در هر دو مسیر خوانده شود');
+    ok(typeof r.meta.ms === 'number', 'زمان باید عدد باشد');
+  }
+});
+
+t('فیلد اجباریِ نبوده، در هر دو مسیر گیر می‌افتد', async () => {
+  const bad = async (model, reply) => {
+    const f = fakeOpenAI(reply);
+    try {
+      await withEnv({ OPENAI_API_KEY: 'sk-t' }, () =>
+        callOpenAISchema({ prompt: 'x', schema: SCHEMA, toolName: 'x', model }));
+      return null;
+    } catch (e) { return e.message; } finally { f.restore(); }
+  };
+  const m1 = await bad('gpt-5-mini', { output: [{ type: 'function_call', name: 'x', arguments: '{}' }] });
+  const m2 = await bad('gpt-4.1', { choices: [{ message: { tool_calls: [{ function: { arguments: '{}' } }] } }] });
+  ok(m1 && m1.includes('a'), `مسیر responses باید فیلد نبوده را بگوید: ${m1}`);
+  ok(m2 && m2.includes('a'), `مسیر chat باید فیلد نبوده را بگوید: ${m2}`);
+});
+
+t('وقتی استدلال کل سقف توکن را می‌خورد، پیام می‌گوید کدام دستگیره را بچرخان', async () => {
+  const f = fakeOpenAI({ status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' }, output: [] });
+  let msg = null;
+  try {
+    await withEnv({ OPENAI_API_KEY: 'sk-t' }, () =>
+      callOpenAISchema({ prompt: 'x', schema: SCHEMA, toolName: 'x', model: 'gpt-5-mini', maxTokens: 64 }));
+  } catch (e) { msg = e.message; } finally { f.restore(); }
+  ok(msg && /[\u0600-\u06FF]/.test(msg), `باید فارسی باشد: ${msg}`);
+  ok(msg.includes('gpt-5-mini') && msg.includes('64'), `مدل و سقف باید در پیام باشند: ${msg}`);
+  ok(/OPENAI_REASONING_EFFORT|سقف توکن را بالا/.test(msg), `راه ادامه باید در پیام باشد: ${msg}`);
+});
+
+t('مدلی که در حساب نیست، با نام خودش گزارش می‌شود', () => {
+  // ۴۰۴ مسیر chat و ۴۰۰ِ code=model_not_found مسیر responses — یک حرف، یک پیام.
+  const a = faOpenAIError(404, { error: { message: 'not found' } }, { model: 'gpt-5-جعلی' });
+  const b = faOpenAIError(400, { error: { message: 'The model does not exist', code: 'model_not_found' } },
+                          { model: 'gpt-5-جعلی', route: '/responses' });
+  for (const m of [a, b]) {
+    ok(m.includes('gpt-5-جعلی'), `نام مدل باید در پیام باشد: ${m}`);
+    ok(m.includes('OPENAI_MODEL'), `باید بگوید کدام کلید را عوض کند: ${m}`);
+    ok(/[\u0600-\u06FF]/.test(m) && !m.includes('{"'), `فارسی و بدون JSON خام: ${m}`);
+  }
+  // درگاه واسطی که /responses ندارد، نباید با «مدل نیست» قاطی شود
+  const gw = faOpenAIError(404, { error: { message: 'Unknown path' } },
+                           { model: 'o3', route: '/responses' });
+  ok(gw.includes('/responses') && gw.includes('OPENAI_BASE_URL'), `بن‌بست درگاه باید راه دررو داشته باشد: ${gw}`);
+});
+
+t('تلاش برای reasoning روی مدل غیراستدلالی بی‌سروصدا نمی‌افتد — یک خط لاگ می‌شود', () => {
   const warn = console.warn;
   const lines = [];
   console.warn = (...a) => lines.push(a.join(' '));
   try {
-    noteDroppedReasoningEffort('high', 'o3-mini-تست');
-    noteDroppedReasoningEffort('high', 'o3-mini-تست');   // تکرار نباید لاگ تازه بسازد
-    eq(noteDroppedReasoningEffort('low', 'gpt-4.1-تست'), null, 'مدل غیراستدلالی اصلاً لاگ ندارد');
-    eq(noteDroppedReasoningEffort(undefined, 'o3-mini'), null, 'وقتی چیزی خواسته نشده، لاگی هم نیست');
-    eq(noteDroppedReasoningEffort('none', 'o3-mini'), null, '«none» یعنی همان رفتار پیش‌فرض');
+    noteDroppedReasoningEffort('high', 'gpt-4.1-تست');
+    noteDroppedReasoningEffort('high', 'gpt-4.1-تست');   // تکرار نباید لاگ تازه بسازد
+    eq(noteDroppedReasoningEffort('low', 'o3-mini-تست'), null, 'روی مدل استدلالی اعمال می‌شود، پس لاگی ندارد');
+    eq(noteDroppedReasoningEffort(undefined, 'gpt-4.1'), null, 'وقتی چیزی خواسته نشده، لاگی هم نیست');
   } finally { console.warn = warn; }
-  eq(lines.length, 1, `فقط یک خط، آن هم برای مدل استدلالی: ${JSON.stringify(lines)}`);
-  ok(lines[0].includes('استدلالی است') && lines[0].includes('ابزارمحور'), lines[0]);
+  eq(lines.length, 1, `فقط یک خط، آن هم برای مدل غیراستدلالی: ${JSON.stringify(lines)}`);
+  ok(lines[0].includes('استدلالی نیست') && lines[0].includes('OPENAI_MODEL'), lines[0]);
   ok(isReasoningModel('o1') && isReasoningModel('gpt-5.1') && !isReasoningModel('gpt-4.1'),
      'تشخیص مدل استدلالی');
+});
+
+t('مقدار بی‌معنا برای reasoning همان اول می‌ایستد، نه با ۴۰۰ انگلیسی', async () => {
+  let msg = null;
+  try {
+    await withEnv({ OPENAI_API_KEY: 'sk-t', OPENAI_REASONING_EFFORT: 'خیلی-زیاد' }, () =>
+      callOpenAISchema({ prompt: 'x', schema: SCHEMA, toolName: 'x', model: 'gpt-5-mini' }));
+  } catch (e) { msg = e.message; }
+  ok(msg && msg.includes('خیلی-زیاد'), `باید بگوید چه مقداری غلط بود: ${msg}`);
+  ok(msg.includes('high') && msg.includes('low'), `باید مقدارهای معتبر را بشمارد: ${msg}`);
 });
 
 t('هر پیام خطایی که کاربر را متوقف می‌کند، راه ادامه دارد', async () => {
