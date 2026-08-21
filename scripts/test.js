@@ -22,7 +22,7 @@ import { openaiEnabled, openaiModel, openaiBase, redactOpenAI, faOpenAIError,
          isReasoningModel, openaiRoute, noteDroppedReasoningEffort,
          schemaIsStrict, readUsage, callOpenAISchema } from '../services/openai.js';
 
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 
 let pass = 0, fail = 0;
 const failures = [];
@@ -721,8 +721,10 @@ t('VOHU_MODEL که نیست ولی OPENAI_MODEL هست — پیام می‌گو�
 
 t('هر خروجی مهر سازنده‌اش را می‌گیرد (producedBy)', async () => {
   await withEnv({ VOHU_DRY_RUN: '1', VOHU_FIXTURES: './fixtures' }, async () => {
+    // با fixture واقعی، نه با toolNameی که فایل ندارد: حالت خشک دیگر برای
+    // نبودِ fixture چیزی از خودش نمی‌سازد.
     const { data, meta } = await callWithSchema({
-      prompt: 'x', schema: { type: 'object', required: [], properties: {} }, toolName: 'هیچ‌فایلی' });
+      prompt: 'x', schema: V.LEARNING_SCHEMA, toolName: 'learning' });
     ok(data.producedBy, 'producedBy باید روی خروجی بنشیند');
     eq(data.producedBy.provider, meta.provider);
     eq(data.producedBy.model, meta.model);
@@ -730,9 +732,724 @@ t('هر خروجی مهر سازنده‌اش را می‌گیرد (producedBy)'
   });
 });
 
+// نبودِ fixture یک واقعیت است، نه جای خالی‌ای که باید پر شود. خروجیِ ساختگی
+// از هیچ اسکیمایی رد نمی‌شود و مرحله‌های بعدی را روی داده‌ی توخالی بنا می‌کند —
+// و بدتر از همه، آن مسیر «تست‌شده» به نظر می‌رسد.
+t('حالت خشک بدون fixture صریح می‌ایستد — چیزی شبیه جواب نمی‌سازد', async () => {
+  await withEnv({ VOHU_DRY_RUN: '1', VOHU_FIXTURES: './fixtures' }, async () => {
+    let err = null;
+    try {
+      await callWithSchema({ prompt: 'x', schema: { type: 'object' }, toolName: 'هیچ‌فایلی' });
+    } catch (e) { err = e; }
+
+    ok(err, 'نبودِ fixture باید خطا بدهد، نه خروجیِ ساختگی');
+    ok(err.message.includes('هیچ‌فایلی'), `خطا باید بگوید کدام مرحله: ${err.message}`);
+    ok(err.message.includes('وجود ندارد'), err.message);
+    ok(err.fixture?.includes('fixtures/هیچ‌فایلی.json'), `مسیر فایل باید در خطا باشد: ${err.fixture}`);
+    ok(err.hint, 'راه ادامه باید گفته شود');
+  });
+});
+
 t('راهنمای خطا دیگر وعده‌ی جایگزینی خودکار نمی‌دهد', () => {
   const h = faModelHint(apiErr(400, CREDIT)) || '';
   ok(!h.includes('خودکار'), `راهنما هنوز از جایگزینی خودکار حرف می‌زند: ${h}`);
+});
+
+// ═══ دروازه‌ی اسکیما — تا امروز فقط به ادبِ مدل تکیه شده بود ═══
+//
+// tool_choice مدل را مجبور می‌کند ابزار را صدا بزند، ولی هیچ‌کس چک نمی‌کرد
+// داخل ابزار چه ریخته. یک بار مدل کل شناخت محتوا را داخل رشته‌ی capacities
+// چپاند و همان خام در انبار نشست — مرحله «انجام‌شده» حساب شد و مرحله‌های
+// بعدی روی هیچ ساخته شدند.
+
+// همان خروجی بدشکلی که واقعاً اتفاق افتاد: کل شیء، از وسط یک فیلد
+const BLOB = `[
+  {"capacity": "روایت شخصی", "evidence": ["A","B","C"], "sampleCount": 3}
+],
+"flatSpots": ["پایان همه‌ی پست‌ها یک الگوی ثابت دارد"],
+"formats": [{"format": "ریلز", "count": 12}],
+"topics": {"recurring": ["قهوه"], "neverTried": ["پشت صحنه"]},
+"contradictions": [],
+"reactionPatterns": [],
+"confident": 0.55
+}
+`;
+
+const GOOD_CONTENT = {
+  capacities: [{ capacity: 'روایت شخصی', evidence: ['A', 'B', 'C'], sampleCount: 3 }],
+  flatSpots: ['x'], formats: [{ format: 'ریلز', count: 12 }],
+  topics: { recurring: ['قهوه'], neverTried: ['پشت صحنه'] },
+  contradictions: [], reactionPatterns: [], confident: 0.55
+};
+
+t('فیلدی که آرایه اعلام شده و رشته آمده، رد می‌شود', () => {
+  const bad = VS.schemaViolations(V.CONTENT_ANALYSIS_SCHEMA, { ...GOOD_CONTENT, capacities: BLOB });
+  ok(bad.length, 'خروجی بدشکل باید تخلف بدهد، نه رد شود از دروازه');
+  eq(bad[0].path, 'capacities');
+  ok(bad[0].why.includes('آرایه') && bad[0].why.includes('رشته'), bad[0].why);
+});
+
+t('خروجی سالم از دروازه رد می‌شود — دروازه‌ای که سالم را بگیرد بدتر است', () => {
+  eq(VS.schemaViolations(V.CONTENT_ANALYSIS_SCHEMA, GOOD_CONTENT).length, 0);
+  eq(VS.schemaViolations(V.CAMPAIGN_SCHEMA, {
+    pieces: [{ n: 1, purpose: 'ask', angle: 'x', tracesTo: 'action' }],
+    heldConstant: ['کانال'], varies: { what: 'x', why: 'y' }, dropOrder: []
+  }).length, 0);
+});
+
+t('دروازه به عمق می‌رود: فیلد الزامیِ نیامده، enum غلط، عددِ بیرون از بازه', () => {
+  const missing = VS.schemaViolations(V.CONTENT_ANALYSIS_SCHEMA, { formats: [], topics: {}, confident: 0.5 });
+  ok(missing.some(v => v.path === 'capacities' && v.got === 'نبود'), JSON.stringify(missing));
+
+  const badEnum = VS.schemaViolations(V.CAMPAIGN_SCHEMA, {
+    pieces: [{ n: 1, purpose: 'فروش', angle: 'x', tracesTo: 'action' }],
+    heldConstant: [], varies: { what: 'x', why: 'y' }, dropOrder: []
+  });
+  ok(badEnum.some(v => v.path === 'pieces[0].purpose'), JSON.stringify(badEnum));
+
+  const badNum = VS.schemaViolations(V.CONTENT_ANALYSIS_SCHEMA, { ...GOOD_CONTENT, confident: 7 });
+  ok(badNum.some(v => v.path === 'confident' && v.expected === '<= 1'), JSON.stringify(badNum));
+});
+
+t('خروجی بدشکل یک بار دوباره تلاش می‌شود، و بار دوم خطای صریح — نه ذخیره‌ی خام', async () => {
+  const notes = [];
+  let err = null;
+  try {
+    await VS.guardSchema({
+      schema: V.CONTENT_ANALYSIS_SCHEMA, toolName: 'content_analysis',
+      attempt: ({ retryNote }) => {
+        notes.push(retryNote);
+        return { data: { ...GOOD_CONTENT, capacities: BLOB },
+                 meta: { inputTokens: 100, outputTokens: 50, ms: 10 } };
+      }
+    });
+  } catch (e) { err = e; }
+
+  ok(err, 'خروجی بدشکل نباید برگردانده شود');
+  eq(notes.length, 2, 'دقیقاً یک بار دوباره تلاش می‌شود، نه صفر بار و نه بی‌نهایت');
+  eq(notes[0], null, 'تلاش اول یادداشت اصلاح ندارد');
+  ok(notes[1] && notes[1].includes('capacities'), `به مدل باید گفته شود کجا را غلط داده: ${notes[1]}`);
+  ok(notes[1].includes('رشته'), 'باید بگوید رشته داده جای آرایه');
+  ok(err.message.includes('capacities'), `خطا باید بگوید کدام فیلد: ${err.message}`);
+  ok(err.violations?.length, 'تخلف‌ها باید روی خطا بمانند');
+  eq(err.usage.outputTokens, 100, 'توکن هر دو تلاش شمرده می‌شود — تلاش سوخته هم پول داده');
+  ok(err.hint && err.hint.includes('ذخیره نشد'), err.hint);
+});
+
+t('اگر تلاش دوم درست بود، همان برمی‌گردد — با ردِ اینکه یک بار رد شده بود', async () => {
+  let n = 0;
+  const { data, meta } = await VS.guardSchema({
+    schema: V.CONTENT_ANALYSIS_SCHEMA, toolName: 'content_analysis',
+    attempt: () => ({ data: ++n === 1 ? { ...GOOD_CONTENT, capacities: BLOB } : GOOD_CONTENT,
+                      meta: { inputTokens: 10, outputTokens: 5, ms: 3 } })
+  });
+  eq(data.capacities.length, 1);
+  eq(meta.attempts, 2);
+  ok(meta.schemaRetry?.[0]?.includes('capacities'), 'باید بماند که بار اول چه چیزی رد شد');
+  eq(meta.outputTokens, 10, 'توکن دو تلاش با هم');
+});
+
+t('خروجی سالم در تلاش اول، تلاش دوم نمی‌خواهد', async () => {
+  let n = 0;
+  const { meta } = await VS.guardSchema({
+    schema: V.CONTENT_ANALYSIS_SCHEMA, toolName: 'x',
+    attempt: () => { n++; return { data: GOOD_CONTENT, meta: { inputTokens: 1, outputTokens: 1 } }; }
+  });
+  eq(n, 1, 'نباید بی‌دلیل دو بار پول داده شود');
+  eq(meta.attempts, 1);
+  ok(!meta.schemaRetry, 'وقتی چیزی رد نشده، ردِ ردشدن هم نباید باشد');
+});
+
+t('اجرای ذخیره‌شده‌ی بدشکل ترمیم می‌شود — ولی بی‌صدا نه', async () => {
+  const { healStoredStages } = await import('../lib/session.js');
+  const run = { url: 'x', stages: { content: { capacities: BLOB, producedBy: { model: 'm' } } } };
+  const done = healStoredStages(run);
+
+  eq(done.length, 1, 'مرحله‌ی بدشکل باید ترمیم شود، نه اینکه رشته بماند');
+  ok(Array.isArray(run.stages.content.capacities), 'capacities باید دوباره آرایه باشد');
+  eq(run.stages.content.confident, 0.55, 'کلیدهای خواهر و برادر هم باید برگردند');
+  eq(run.stages.content.topics.neverTried[0], 'پشت صحنه');
+  eq(run.repairs.length, 1, 'ترمیم باید ثبت شود — دست‌کاریِ بی‌ردپا همان برشِ بی‌صداست');
+  eq(run.repairs[0].stage, 'content');
+
+  // بار دوم چیزی برای ترمیم نیست، و مرحله‌ی سالم اصلاً دست نمی‌خورد
+  eq(healStoredStages(run).length, 0);
+  eq(run.repairs.length, 1);
+});
+
+// ═══ fixtureها — تنها داده‌ای که هیچ‌وقت از دروازه رد نمی‌شود ═══
+//
+// حالت خشک عمداً guardSchema را دور می‌زند: آنجا مدلی در کار نیست و خروجی
+// fixture خودمان است. نتیجه‌اش این است که fixtureها تنها ورودی‌اند که هیچ‌وقت
+// اعتبارسنجی نمی‌شوند — و test-loop و test-once و بخش بزرگی از همین فایل
+// رویشان بنا شده‌اند.
+//
+// fixtureی که با اسکیمای امروز نخواند، یک سبزِ دروغین می‌سازد: جریان از رویش
+// رد می‌شود، ولی همان داده اگر از مدل واقعی می‌آمد در دروازه می‌ماند. یعنی
+// دقیقاً همان‌جا که فکر می‌کنیم پوشش داریم، نداریم.
+//
+// اولین باری که این تست نوشته شد همین را گرفت: `usable` در
+// business_knowledge.json بولی مانده بود، در حالی که اسکیما سه‌حالته شده
+// ('yes'/'no'/'unknown') — و GATES.usableProducts که فقط 'yes' را می‌شمارد،
+// روی آن fixture هیچ محصول قابل‌استفاده‌ای نمی‌دید.
+
+/** هر fixtureی که خروجی مدل است، با اسکیمای همان مرحله. کلید = همان toolName. */
+const FIXTURE_SCHEMA = {
+  business_knowledge: 'EXTRACTION_SCHEMA',
+  playing_field:      'COMPETITOR_SCHEMA',
+  content_analysis:   'CONTENT_ANALYSIS_SCHEMA',
+  market:             'MARKET_SCHEMA',
+  first_insight:      'FIRST_INSIGHT_SCHEMA',
+  questions:          'QUESTIONS_SCHEMA',
+  strategy_card:      'STRATEGY_CARD_SCHEMA',
+  campaign:           'CAMPAIGN_SCHEMA',
+  evidence_gate:      'EVIDENCE_GATE_SCHEMA',
+  performance:        'PERFORMANCE_SCHEMA',
+  learning:           'LEARNING_SCHEMA',
+  content_item:       'CONTENT_ITEM_SCHEMA'
+};
+
+/** fixtureهایی که خروجی مدل نیستند: ورودی خامِ آپیفای و متن صفحه. */
+const NOT_MODEL_OUTPUT = ['apify-posts.json', 'apify-reels.json', 'page.txt'];
+
+const FIXTURE_DIR   = new URL('../fixtures/', import.meta.url);
+const fixtureFiles  = existsSync(FIXTURE_DIR) ? readdirSync(FIXTURE_DIR).sort() : [];
+
+t('پوشه‌ی fixtures خالی نیست — تستی که چیزی برای سنجیدن ندارد، سبزِ توخالی است', () => {
+  ok(fixtureFiles.length, 'هیچ fixtureی پیدا نشد');
+});
+
+// فهرست از روی خودِ پوشه خوانده می‌شود، نه از روی یک فهرست دستی: fixtureی که
+// فردا اضافه شود هم باید خودش را معرفی کند، وگرنه بی‌صدا از سنجش در می‌رود —
+// و همان سکوت است که این تست برای بستنش نوشته شده.
+t('هر فایل در fixtures یا اسکیما دارد یا صریح استثنا شده — سکوت مجاز نیست', () => {
+  const orphan = fixtureFiles.filter(f =>
+    !NOT_MODEL_OUTPUT.includes(f) && !FIXTURE_SCHEMA[f.replace(/\.json$/, '')]);
+  eq(orphan.length, 0,
+     `fixtureی که هیچ‌کس اعتبارش را نمی‌سنجد: ${orphan.join('، ')} — یا در FIXTURE_SCHEMA ثبتش کن یا در NOT_MODEL_OUTPUT`);
+});
+
+t('اسکیمایی که در FIXTURE_SCHEMA نام برده شده، واقعاً وجود دارد', () => {
+  const gone = Object.entries(FIXTURE_SCHEMA).filter(([, n]) => !V[n]);
+  eq(gone.length, 0, `اسکیمای ناموجود (اسمش عوض شده؟): ${gone.map(([k, n]) => `${k}→${n}`).join('، ')}`);
+});
+
+for (const file of fixtureFiles) {
+  const schemaName = FIXTURE_SCHEMA[file.replace(/\.json$/, '')];
+  if (!schemaName) continue;              // استثناها؛ تستِ «سکوت مجاز نیست» بالا هوایشان را دارد
+
+  t(`fixture «${file}» از ${schemaName} رد می‌شود`, () => {
+    const data = JSON.parse(readFileSync(new URL(file, FIXTURE_DIR), 'utf8'));
+    const bad  = VS.schemaViolations(V[schemaName], data);
+    eq(bad.length, 0, 'fixture با اسکیمای امروز نمی‌خواند:\n     '
+                    + bad.slice(0, 6).map(v => v.why).join('\n     '));
+  });
+}
+
+// و خودِ این سنجه باید دندان داشته باشد. اگر schemaViolations روی داده‌ی
+// fixture هیچ‌وقت چیزی نگیرد، همه‌ی تست‌های بالا سبزِ بی‌معنی‌اند.
+t('fixtureی بدشکل این تست را قرمز می‌کند', () => {
+  const card = JSON.parse(readFileSync(new URL('strategy_card.json', FIXTURE_DIR), 'utf8'));
+  eq(VS.schemaViolations(V.STRATEGY_CARD_SCHEMA, card).length, 0, 'خودِ fixture باید سالم باشد');
+
+  // همان بدشکلی‌ای که واقعاً اتفاق افتاد: آرایه‌ای که رشته شده
+  const strung = { ...card, options: JSON.stringify(card.options) };
+  ok(VS.schemaViolations(V.STRATEGY_CARD_SCHEMA, strung).some(v => v.path === 'options'),
+     'آرایه‌ای که رشته شده باید گرفته شود، وگرنه این تست چیزی را نمی‌سنجد');
+
+  // و فیلد الزامیِ نیامده
+  const { measurement, ...noMeasure } = card;
+  ok(VS.schemaViolations(V.STRATEGY_CARD_SCHEMA, noMeasure).some(v => v.path === 'measurement'),
+     'فیلد الزامیِ حذف‌شده باید گرفته شود');
+});
+
+// ═══ حکم دروازه و تحلیل محتوا، در رکورد اجرا می‌مانند ═══
+//
+// هر دو تا امروز «یک بار دیده می‌شدند و می‌رفتند»: گزارش دروازه به رابط
+// برمی‌گشت و هیچ‌جا نمی‌نشست، و تحلیل محتوا در نتیجه‌ی یک کار پس‌زمینه می‌ماند
+// و با همان کار می‌رفت. دروازه‌ی شواهد آخرین ایست قبل از انتشار است — حکمش
+// باید بخشی از رکورد اجرا باشد، وگرنه دو هفته بعد نمی‌شود گفت این متن اصلاً
+// از دروازه رد شده بود یا نه.
+//
+// fixtureی برای این دو مرحله در پوشه نیست و ساخته هم نمی‌شود: اجرای واقعیِ
+// بعدی خودش می‌سازدش، از همان مسیری که کاربر می‌رود. اینجا برای اینکه بشود
+// *بدون مدل* سیم‌کشی را سنجید، یک fixture موقت در پوشه‌ی موقت ساخته می‌شود —
+// بدلِ داخل تست، نه چیزی که در fixtures/ بنشیند.
+
+/**
+ * یک تستِ خشک، در پروسه‌ی جدا.
+ *
+ * چرا جدا: withEnv متغیر محیطیِ *سراسری* را عوض می‌کند و تست‌های async این
+ * فایل هم‌زمان جلو می‌روند — تستِ دیگری می‌تواند وسط await این تست
+ * VOHU_DRY_RUN را بردارد. آن‌وقت این تست بی‌سروصدا به مدل واقعی وصل می‌شود:
+ * هم پول خرج می‌کند، هم نتیجه‌اش دیگر تکرارپذیر نیست. پروسه‌ی جدا این را
+ * ناممکن می‌کند، نه بعید.
+ *
+ * fixtureها در پوشه‌ی موقت ساخته می‌شوند — بدلِ داخل تست، نه چیزی که در
+ * fixtures/ بنشیند.
+ */
+async function dryChild(files, code) {
+  const { mkdtemp, writeFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { execFileSync } = await import('node:child_process');
+  const path = (await import('node:path')).default;
+
+  const dir = await mkdtemp(path.join(tmpdir(), 'vohu-fx-'));
+  for (const [name, data] of Object.entries(files))
+    await writeFile(path.join(dir, `${name}.json`), JSON.stringify(data), 'utf8');
+  const store = await mkdtemp(path.join(tmpdir(), 'vohu-store-'));
+
+  let out;
+  try {
+    out = execFileSync('node', ['--input-type=module', '-e', code], {
+      encoding: 'utf8',
+      env: { ...process.env, VOHU_DRY_RUN: '1', VOHU_FIXTURES: dir, VOHU_STORE_DIR: store,
+             VOHU_REPO: new URL('../', import.meta.url).pathname }
+    });
+  } catch (e) {
+    throw new Error(`پروسه‌ی فرزند شکست: ${(e.stderr || e.message || '').toString().slice(-400)}`);
+  }
+  return JSON.parse(out.trim().split('\n').at(-1));
+}
+
+const GATE_OUT = {
+  verdict: 'needs_fix',
+  claims: [
+    { text: 'این کرم لک را کامل از بین می‌برد', kind: 'verifiable', status: 'blocked',
+      backedBy: null, factAgeDays: null, rewrite: 'خیلی‌ها گفته‌اند پوستشان روشن‌تر شده' },
+    { text: 'من خودم استفاده کردم', kind: 'personal', status: 'n/a',
+      backedBy: null, factAgeDays: null, rewrite: null }
+  ]
+};
+
+t('حکم دروازه‌ی شواهد روی رکورد اجرا می‌ماند — نه فقط روی صفحه', async () => {
+  const r = await dryChild({ evidence_gate: GATE_OUT }, `
+    const R = process.env.VOHU_REPO;
+    const { checkContent } = await import(R + 'lib/pipeline.js');
+    const { loadRun }      = await import(R + 'services/store.js');
+
+    const run = { url: 'https://example.com/x', stages: {} };
+    const content = 'این کرم لک را کامل از بین می‌برد. من خودم استفاده کردم.';
+    const { gate } = await checkContent({ content, knowledge: {}, market: {}, run });
+    await checkContent({ content: 'متن دوم', knowledge: {}, market: {}, run });
+
+    const stored = await loadRun(run.url);
+    console.log(JSON.stringify({ content, gatePass: gate.pass, records: run.evidenceChecks,
+                                 storedCount: stored.evidenceChecks?.length ?? null }));
+  `);
+
+  eq(r.records.length, 2, 'رکورد است، نه آخرین وضعیت — بررسی دوم اولی را پاک نمی‌کند');
+  const rec = r.records[0];
+  eq(rec.content, r.content, 'متن ورودی باید در رکورد باشد — حکمِ بدونِ متن قابل بازخوانی نیست');
+  eq(rec.verdict, 'needs_fix', 'حکم باید در رکورد باشد');
+  ok(rec.at, 'زمان باید در رکورد باشد');
+  eq(rec.gate.pass, false, 'حکم کد هم کنارش می‌ماند، نه فقط حکم مدل');
+  eq(rec.gate.blocked.length, 1, 'ادعای سدشده باید در رکورد پیدا باشد');
+  eq(rec.report.claims.length, 2, 'گزارش دست‌نخورده می‌ماند — همان شکلی که مدل داده');
+  eq(r.gatePass, false, 'و همان حکم به صداکننده هم برمی‌گردد');
+  eq(r.storedCount, 2, 'روی دیسک هم نشسته، نه فقط در حافظه');
+});
+
+t('رکورد حکم‌ها سقف دارد — و آنچه می‌افتد شمرده می‌شود', async () => {
+  // سقف اینجا برای «کم‌کردن» نیست: با پنج تستر هیچ اجرایی به دویست بررسی
+  // نمی‌رسد. برای این است که یک حلقه‌ی اشتباه نتواند فایل اجرا را بی‌نهایت
+  // بزرگ کند — و اگر خورد، بی‌صدا نخورد.
+  //
+  // رکورد تا یکی مانده به سقف از قبل پر می‌شود و بعد دو بررسی واقعی انجام
+  // می‌شود. دویست‌بار صدازدنِ دروازه همین را ثابت می‌کرد، ولی هر بار یک
+  // نوشتنِ اتمیِ فایلِ درحال‌بزرگ‌شدن است — تستی که بیست ثانیه طول بکشد،
+  // «بعد از هر تغییر» اجرا نمی‌شود.
+  const r = await dryChild({ evidence_gate: GATE_OUT }, `
+    const R = process.env.VOHU_REPO;
+    const { checkContent, KEEP_EVIDENCE_CHECKS } = await import(R + 'lib/pipeline.js');
+    const { loadRun } = await import(R + 'services/store.js');
+
+    const run = { url: 'https://example.com/loop', stages: {},
+      evidenceChecks: Array.from({ length: KEEP_EVIDENCE_CHECKS - 1 }, (_, i) =>
+        ({ at: '2026-08-01T00:00:00Z', content: 'قدیمی ' + i, verdict: 'pass',
+           gate: { pass: true }, report: { verdict: 'pass', claims: [] } })) };
+
+    await checkContent({ content: 'تازه ۱', knowledge: {}, market: {}, run });   // دقیقاً روی سقف
+    const atCap = { kept: run.evidenceChecks.length, dropped: run.evidenceChecksDropped ?? null };
+
+    await checkContent({ content: 'تازه ۲', knowledge: {}, market: {}, run });   // یکی بیشتر از سقف
+    const stored = await loadRun(run.url);
+
+    console.log(JSON.stringify({
+      keep: KEEP_EVIDENCE_CHECKS, atCap,
+      kept: run.evidenceChecks.length, dropped: run.evidenceChecksDropped,
+      first: run.evidenceChecks[0].content, last: run.evidenceChecks.at(-1).content,
+      storedCount: stored.evidenceChecks?.length ?? null
+    }));
+  `);
+
+  eq(r.keep, 200, 'سقف حکم‌ها ۲۰۰ است، نه ۲۰ — رکورد دروازه باید بماند');
+  eq(r.atCap.kept, r.keep, 'دقیقاً روی سقف، چیزی نمی‌افتد');
+  eq(r.atCap.dropped, null, 'و شمارنده هم بی‌دلیل روشن نمی‌شود');
+  eq(r.kept, r.keep, 'بیشتر از سقف روی اجرا نمی‌ماند');
+  eq(r.dropped, 1, 'آنچه از رکورد افتاد، بی‌صدا نمی‌افتد');
+  eq(r.last, 'تازه ۲', 'آخرین حکم‌ها می‌مانند');
+  eq(r.first, 'قدیمی 1', 'و قدیمی‌ترین از اول می‌افتد');
+  eq(r.storedCount, r.keep, 'روی دیسک هم همان');
+});
+
+t('بدون اجرا، دروازه همان‌طور کار می‌کند — ثبت اجباری نیست', async () => {
+  const r = await dryChild({ evidence_gate: GATE_OUT }, `
+    const { checkContent } = await import(process.env.VOHU_REPO + 'lib/pipeline.js');
+    const { report, gate } = await checkContent({ content: 'x', knowledge: {}, market: {} });
+    console.log(JSON.stringify({ verdict: report.verdict, pass: gate.pass }));
+  `);
+  eq(r.verdict, 'needs_fix');
+  eq(r.pass, false);
+});
+
+const ITEM_OUT = {
+  topic: 'مراقبت پوست', coreMessage: 'ضدآفتاب را زیر آرایش هم باید زد',
+  hook: null, style: 'روایت شخصی', emotion: null, cta: null,
+  keywords: ['ضدآفتاب', 'پوست'],
+  performance: { versus: 'above_median', note: 'بالاتر از میانه‌ی پیج' },
+  facts: [], unknowns: [], confident: 0.7
+};
+
+t('تحلیل محتوا روی اجرا می‌ماند — ولی سقف دارد و افتادنش شمرده می‌شود', async () => {
+  const r = await dryChild({ content_item: ITEM_OUT }, `
+    const R = process.env.VOHU_REPO;
+    const { analyzeItems, KEEP_ANALYSES } = await import(R + 'lib/igAnalyze.js');
+    const { loadRun } = await import(R + 'services/store.js');
+
+    const items = Array.from({ length: KEEP_ANALYSES + 5 }, (_, i) => ({
+      shortCode: 'S' + i, type: 'post', caption: 'کپشن شماره ' + i,
+      hashtags: [], mentions: [], slides: [], comments: [], metrics: { likes: 10 }
+    }));
+
+    const run = { url: 'https://example.com/ig', stages: {} };
+    const out = await analyzeItems(items, async () => {}, { run });
+    const bare = await analyzeItems(items.slice(0, 2), async () => {});   // بدون اجرا هم باید کار کند
+    const stored = await loadRun(run.url);
+
+    console.log(JSON.stringify({
+      keep: KEEP_ANALYSES, total: items.length, returned: out.results.length,
+      kept: run.contentAnalyses, dropped: run.contentAnalysesDropped,
+      storedCount: stored.contentAnalyses?.length ?? null, bare: bare.results.length,
+      errors: out.results.filter(x => x.error).map(x => x.error).slice(0, 2)
+    }));
+  `);
+
+  eq(r.errors.length, 0, `تحلیل نباید خطا بدهد: ${r.errors[0] || ''}`);
+  eq(r.returned, r.total, 'خروجی خودِ تابع بریده نمی‌شود — فقط رکورد سقف دارد');
+  eq(r.kept.length, r.keep, `فقط ${r.keep} تای آخر روی اجرا می‌ماند`);
+  eq(r.dropped, 5, 'آنچه از رکورد افتاد، بی‌صدا نمی‌افتد');
+  eq(r.kept.at(-1).shortCode, 'S' + (r.total - 1), 'آخرین‌ها می‌مانند، نه اولین‌ها');
+  eq(r.kept[0].shortCode, 'S5');
+  ok(r.kept[0].at, 'زمان همراه هر تحلیل می‌ماند');
+  eq(r.kept[0].analysis.topic, 'مراقبت پوست');
+  eq(r.storedCount, r.keep, 'روی دیسک هم همان');
+  eq(r.bare, 2, 'استخراج سرِخود به اجرا بند نیست');
+});
+
+// ═══ برشِ بی‌صدا — چیزی که حذف می‌شود باید نوشته شود ═══
+
+t('ظرفیت که بریده می‌شود، خودِ برش هم نوشته می‌شود', () => {
+  const cap = V.realisticCapacity({ statedPerWeek: 2, card: { prediction: { checkAfterDays: 14 } } });
+  eq(cap.statedTotal, 4);
+  eq(cap.realisticTotal, 2);
+  ok(cap.cut, 'برش ۴→۲ باید ثبت شود، نه اینکه از تفاضل دو عدد فهمیده شود');
+  eq(cap.cut.count, 2);
+  ok(cap.cut.why.includes('پیش‌فرض'), `دلیل برش باید نوشته شود: ${cap.cut.why}`);
+
+  // وقتی چیزی بریده نشده، برشِ ساختگی هم ساخته نمی‌شود
+  const full = V.realisticCapacity({ statedPerWeek: 1, card: { prediction: { checkAfterDays: 7 } },
+                                     history: [{ planned: 2, published: 2 }] });
+  eq(full.cut, null);
+});
+
+t('dropOrder خالی با چند قطعه و بدون دلیل، یک برشِ بی‌صداست', () => {
+  const cap = V.realisticCapacity({ statedPerWeek: 2, card: { prediction: { checkAfterDays: 14 } } });
+  const camp = { pieces: [{ n: 1 }, { n: 2 }], dropOrder: [] };
+
+  const r = V.GATES.checkCuts(camp, cap);
+  ok(!r.pass, 'باید گیر بیفتد');
+  ok(r.cuts.some(c => c.what === 'ظرفیت اعلامی' && c.count === 2), JSON.stringify(r.cuts));
+  ok(r.unexplained.some(u => u.what === 'ترتیب حذف'), JSON.stringify(r.unexplained));
+
+  // با دلیلِ نوشته‌شده، همان کمپین می‌گذرد — خواسته «توضیح» است نه «فهرست»
+  ok(V.GATES.checkCuts({ ...camp, dropOrderNote: 'هر دو قطعه هسته‌اند: بدون اولی مدرکی نشان داده نشده' }, cap).pass);
+  // یا با فهرستِ واقعی
+  ok(V.GATES.checkCuts({ ...camp, dropOrder: [2] }, cap).pass);
+});
+
+t('کمتر از ظرفیت واقع‌بینانه ساختن هم یک برش است و دلیل می‌خواهد', () => {
+  const cap = V.realisticCapacity({ statedPerWeek: 4, card: { prediction: { checkAfterDays: 14 } } });
+  const r = V.GATES.checkCuts({ pieces: [{ n: 1 }], dropOrder: [1], dropOrderNote: null }, cap);
+  const c = r.cuts.find(x => x.what === 'قطعه‌های برنامه');
+  ok(c, JSON.stringify(r.cuts));
+  eq(c.to, 1);
+  ok(r.unexplained.some(u => u.what === 'قطعه‌های برنامه'), 'بی‌دلیل کم‌ساختن باید علامت بخورد');
+  ok(V.GATES.checkCuts({ pieces: [{ n: 1 }], dropOrder: [1], fewerPiecesWhy: 'فقط یک محصول قابل استفاده بود' }, cap)
+      .unexplained.every(u => u.what !== 'قطعه‌های برنامه'));
+});
+
+// ═══ خط پایه — عددی که کد می‌شمارد، از مدل پرسیده نمی‌شود ═══
+
+const POSTS = [
+  { id: 'a', date: '2026-08-17T00:00:00Z', likes: 214, comments: 83,  views: 1526 },
+  { id: 'b', date: '2026-08-08T00:00:00Z', likes: 424, comments: 250, views: 18975 },
+  { id: 'c', date: '2026-07-30T00:00:00Z', likes: 256, comments: 175, views: 3617 },
+  { id: 'd', date: '2026-07-19T00:00:00Z', likes: 174, comments: 14,  views: 342 }
+];
+
+t('خط پایه از آمار پست‌ها شمرده می‌شود، نه حدس زده', () => {
+  const b = V.countedBaseline(POSTS);
+  eq(b.recentN, 3);
+  eq(b.recent.comments, Math.round((83 + 250 + 175) / 3), 'میانگین سه پست *اخیر*، نه سه تای اول فهرست');
+  eq(b.all.comments, Math.round((83 + 250 + 175 + 14) / 4));
+  eq(V.countedBaseline([]), null, 'بدون آمار، عددِ ساختگی ساخته نمی‌شود');
+  eq(V.countedBaseline([{ id: 'x' }]), null);
+});
+
+t('پستی که عددش را نداده، صفر شمرده نمی‌شود', () => {
+  // Number(null) صفر است. بدون فیلترِ null، پستِ بی‌آمار میانگین را بی‌صدا
+  // پایین می‌کشد و خط پایه از چیزی که واقعاً اتفاق افتاده کمتر درمی‌آید.
+  const mixed = [
+    { id: 'a', date: '2026-08-10T00:00:00Z', likes: 100, comments: 40, views: null },
+    { id: 'b', date: '2026-08-09T00:00:00Z', likes: 200, comments: null, views: null },
+    { id: 'c', date: '2026-08-08T00:00:00Z', likes: 300, comments: null, views: null }
+  ];
+  const b = V.countedBaseline(mixed);
+  eq(b.all.comments, 40, 'میانگین روی همان یک پستی که کامنت داشت، نه روی هر سه');
+  eq(b.all.n.comments, 1, 'چند پست پشتِ عدد است، همراه عدد ذخیره می‌شود');
+  eq(b.all.views, null, 'عددی که هیچ پستی نداشت، صفر نمی‌شود — null می‌ماند');
+  eq(b.all.likes, 200);
+});
+
+t('اختلافِ پنجره‌ی اخیر با کل تاریخ شمرده و علامت‌گذاری می‌شود', () => {
+  // نمونه‌ی واقعی: سه پست آخر ۶۵ کامنت در هر پست، دوازده پست ۱۶ تا.
+  const surge = [
+    ...[70, 60, 65].map((c, i) => ({ id: `r${i}`, date: `2026-08-2${i}T00:00:00Z`, comments: c, likes: 100 })),
+    ...Array.from({ length: 9 }, (_, i) => ({ id: `o${i}`, date: `2026-07-0${i + 1}T00:00:00Z`, comments: 0, likes: 100 }))
+  ];
+  const b = V.countedBaseline(surge);
+  eq(b.recent.comments, 65);
+  eq(b.all.comments, 16, 'کل تاریخ عدد دیگری می‌گوید');
+  eq(b.trend.comments.diverged, true);
+  eq(b.trend.comments.direction, 'up');
+  eq(b.trend.likes.diverged, false, 'متریکی که تکان نخورده، هشدار الکی نمی‌گیرد');
+
+  // پنجره = کل تاریخ → مقایسه‌ای در کار نیست
+  const few = V.countedBaseline([{ id: 'a', date: '2026-08-10T00:00:00Z', comments: 9 }]);
+  eq(few.trend.comments, undefined, 'وقتی پنجره همان کل تاریخ است، اختلافی گزارش نمی‌شود');
+});
+
+t('اختلاف زیاد، صریح در کارت نوشته می‌شود — نه فقط در عددها', () => {
+  // «دو هفته بعد هر عددی موفقیت به نظر می‌رسد» دقیقاً همین‌جا جلویش گرفته می‌شود.
+  const surge = [
+    ...[70, 60, 65].map((c, i) => ({ id: `r${i}`, date: `2026-08-2${i}T00:00:00Z`, comments: c })),
+    ...Array.from({ length: 9 }, (_, i) => ({ id: `o${i}`, date: `2026-07-0${i + 1}T00:00:00Z`, comments: 0 }))
+  ];
+  const b = V.countedBaseline(surge);
+
+  const card = { measurement: { countable: true, metric: 'تعداد کامنت روی هر پست', baseline: null }, cells: {} };
+  const r = V.GATES.fillBaseline(card, b);
+  ok(card.measurement.baseline.includes('65'), card.measurement.baseline);
+  ok(card.measurement.baseline.includes('در هر پست'), 'به‌ازای هر پست، نه مجموع');
+  ok(card.measurement.baseline.includes('3 پست اخیر'), 'و از پنجره‌ی اخیر، نه کل تاریخ');
+  const note = card.measurement.baselineTrend;
+  ok(note, 'اختلاف ۶۵ به ۱۶ نباید بی‌صدا رد شود');
+  ok(note.includes('65') && note.includes('16'), note);
+  ok(/بالا رفته/.test(note), note);
+  eq(r.trend, note, 'فراخوان هم خبردار می‌شود، نه فقط کارت');
+
+  // حتی وقتی خودِ مدل عددی نوشته، انتخابِ پنجره باز هم یک برش است
+  const said = { measurement: { countable: true, metric: 'کامنت هر پست', baseline: 'الان ۶۵ تا' }, cells: {} };
+  V.GATES.fillBaseline(said, b);
+  eq(said.measurement.baseline, 'الان ۶۵ تا');
+  ok(said.measurement.baselineTrend, 'برشِ پنجره به خط پایه‌ی مدل هم می‌چسبد');
+  ok(!/گرفتم/.test(said.measurement.baselineTrend),
+     'نمی‌دانیم مدل از کدام پنجره برداشته — پس ادعایش را نمی‌کنیم، فقط هر دو عدد را رو می‌کنیم');
+
+  // جمله‌ی خودِ مدل بازنویسی نمی‌شود
+  const own = { measurement: { countable: true, metric: 'کامنت هر پست', baseline: null,
+                               baselineTrend: 'خودم گفتم روند بالا رفته' }, cells: {} };
+  V.GATES.fillBaseline(own, b);
+  eq(own.measurement.baselineTrend, 'خودم گفتم روند بالا رفته');
+
+  // اختلاف کم = سکوت. هشدارِ همیشگی همان بی‌هشداری است.
+  const flat = { measurement: { countable: true, metric: 'کامنت', baseline: null }, cells: {} };
+  V.GATES.fillBaseline(flat, V.countedBaseline(POSTS));
+  eq(flat.measurement.baselineTrend, undefined, 'وقتی روند تکان نخورده، جمله‌ی اضافه نوشته نمی‌شود');
+});
+
+t('برگشت به کل تاریخ، وقتی پنجره‌ی اخیر عدد ندارد، گفته می‌شود', () => {
+  const posts = [
+    { id: 'a', date: '2026-08-20T00:00:00Z', likes: 10 },
+    { id: 'b', date: '2026-08-19T00:00:00Z', likes: 10 },
+    { id: 'c', date: '2026-08-18T00:00:00Z', likes: 10 },
+    { id: 'd', date: '2026-07-01T00:00:00Z', likes: 10, comments: 40 }
+  ];
+  const card = { measurement: { countable: true, metric: 'کامنت هر پست', baseline: null }, cells: {} };
+  const r = V.GATES.fillBaseline(card, V.countedBaseline(posts));
+  eq(r.filled.fromRecent, false);
+  ok(card.measurement.baseline.includes('1 پست خوانده‌شده'), card.measurement.baseline);
+  ok(/پنجره‌ی اخیر/.test(card.measurement.baselineTrend || ''), card.measurement.baselineTrend);
+});
+
+t('خط پایه‌ی خالی، وقتی عدد داریم، پر می‌شود — با برچسبِ شمرده‌شده', () => {
+  const card = { measurement: { countable: true, metric: 'تعداد کامنت روی هر پست', baseline: null },
+                 cells: { successSignal: { value: 'کامنت بیشتر' } } };
+  const r = V.GATES.fillBaseline(card, V.countedBaseline(POSTS));
+  ok(r.filled, JSON.stringify(r));
+  eq(r.filled.metric, 'comments');
+  ok(card.measurement.baseline.includes('169'), card.measurement.baseline);
+  eq(card.measurement.baselineOrigin, 'counted_by_code');
+  ok(card.measurement.countedFrom, 'عددها باید همراه کارت بمانند تا بعداً قابل بازبینی باشند');
+});
+
+t('خط پایه‌ی حدسی جای عددِ شمرده را نمی‌گیرد، و متریکِ ناشناخته null می‌ماند', () => {
+  const said = { measurement: { countable: true, metric: 'کامنت', baseline: 'الان ۴ تا' }, cells: {} };
+  V.GATES.fillBaseline(said, V.countedBaseline(POSTS));
+  eq(said.measurement.baseline, 'الان ۴ تا', 'چیزی که مدل خودش داده بازنویسی نمی‌شود');
+
+  const blind = { measurement: { countable: false, metric: 'تعداد دایرکت', baseline: null }, cells: {} };
+  V.GATES.fillBaseline(blind, V.countedBaseline(POSTS));
+  eq(blind.measurement.baseline, null, 'عددی که نداریم ساخته نمی‌شود');
+  ok(blind.measurement.baselineNote, 'ولی نبودنش نوشته می‌شود');
+
+  const none = { measurement: { countable: true, metric: 'کامنت', baseline: null }, cells: {} };
+  V.GATES.fillBaseline(none, null);
+  ok(none.measurement.baselineNote.includes('آمار'), none.measurement.baselineNote);
+});
+
+t('عددهای شمرده‌شده واقعاً به مرحله‌ی کارت می‌رسند', () => {
+  // قاعده‌ی خط پایه سال‌ها در پرامپت بود و شلیک نمی‌کرد، چون هیچ عددی
+  // جلوی مدل نبود. تست همان مسیر را می‌بندد.
+  const p = V.STRATEGY_CARD_PROMPT({ knowledge: {}, insight: 'x', answers: {}, constraints: [],
+                                     fatigue: [], baselines: V.countedBaseline(POSTS) });
+  ok(p.includes('خط پایه‌های شمرده‌شده'), 'بخش خط پایه باید در پرامپت باشد');
+  ok(p.includes('169'), 'خودِ عدد باید در پرامپت باشد، نه فقط دستور «حدس نزن»');
+  ok(p.includes('به‌ازای هر پست، نه مجموع'), 'قاعده‌ی واحد باید صریح باشد');
+  ok(p.includes('از پنجره‌ی اخیر، نه کل تاریخ'), 'قاعده‌ی پنجره باید صریح باشد');
+  ok(/diverged/.test(p), 'مدل باید بداند کِی موظف است اختلافِ پنجره را بگوید');
+
+  const bare = V.STRATEGY_CARD_PROMPT({ knowledge: {}, insight: 'x', answers: {}, constraints: [], fatigue: [] });
+  ok(bare.includes('شمردنی نیست'), 'نبودِ آمار هم صریح گفته می‌شود، نه اینکه جای خالی بماند');
+});
+
+// ═══ توضیحِ رقیب — رسیدن افت کرده، واکنش ثابت مانده ═══
+
+/** رسیدن نصف شده، واکنش سر جایش. همان حالتی که حکمِ اشتباه می‌سازد. */
+const REACH_DROP = [
+  ...Array.from({ length: 3 }, (_, i) => ({ id: `r${i}`, date: `2026-08-2${i}T00:00:00Z`,
+                                            views: 1000, comments: 40, likes: 100 })),
+  ...Array.from({ length: 9 }, (_, i) => ({ id: `o${i}`, date: `2026-07-0${i + 1}T00:00:00Z`,
+                                            views: 4000, comments: 41, likes: 104 }))
+];
+
+t('افت رسیدن با واکنشِ ثابت، یک توضیح رقیب شمرده می‌شود', () => {
+  const c = V.reachConfound(V.countedBaseline(REACH_DROP));
+  ok(c, 'بازدید ۱۰۰۰ در برابر ۴۰۰۰ با کامنتِ ثابت باید توضیح رقیب بسازد');
+  eq(c.reach.metric, 'views');
+  // میانگین کل: (۳×۱۰۰۰ + ۹×۴۰۰۰)/۱۲ = ۳۲۵۰ — هر دو عدد باید در جمله باشند
+  ok(c.sentence.includes('1000') && c.sentence.includes('3250'), c.sentence);
+  ok(/به‌ازای هر بیننده/.test(c.sentence), 'باید بگوید محتوا به‌ازای هر بیننده بهتر شده، نه بدتر');
+  eq(c.steady.map(x => x.metric).sort().join(','), 'comments,likes');
+
+  // واکنش هم که افتاده باشد، دو عدد یک چیز می‌گویند — توضیح رقیبی در کار نیست
+  const both = REACH_DROP.map(p => p.views === 1000 ? { ...p, comments: 4, likes: 10 } : p);
+  eq(V.reachConfound(V.countedBaseline(both)), null, 'وقتی واکنش هم افتاده، توضیح رقیب ساخته نمی‌شود');
+
+  // رسیدن که بالا رفته، این مسئله نیست
+  const up = REACH_DROP.map(p => ({ ...p, views: p.views === 1000 ? 4000 : 1000 }));
+  eq(V.reachConfound(V.countedBaseline(up)), null);
+  eq(V.reachConfound(null), null, 'بدون آمار، ادعایی ساخته نمی‌شود');
+});
+
+t('توضیح رقیب در «چه چیزی ابطال می‌شود» می‌نشیند، نه در حاشیه', () => {
+  const b = V.countedBaseline(REACH_DROP);
+  const card = { prediction: { observable: 'کامنت‌ها بیشتر می‌شود', checkAfterDays: 14 } };
+  const r = V.GATES.addCompetingExplanation(card, b);
+  ok(r.added, 'باید اضافه شود');
+  eq(card.prediction.invalidatedBy.length, 1);
+  ok(/رسیدن/.test(card.prediction.invalidatedBy[0]), card.prediction.invalidatedBy[0]);
+  ok(card.prediction.reachConfound, 'عددها همراه کارت می‌مانند تا بعداً قابل بازبینی باشند');
+
+  // اگر مدل خودش گفته باشد، دوباره نوشته نمی‌شود
+  const said = { prediction: { invalidatedBy: ['اگر بازدید باز هم افت کند، مسئله رسیدن است'] } };
+  const r2 = V.GATES.addCompetingExplanation(said, b);
+  eq(r2.added, null);
+  eq(said.prediction.invalidatedBy.length, 1, 'حرف تکراری اضافه نمی‌شود');
+
+  // و وقتی رسیدن و واکنش هم‌جهت‌اند، جمله‌ی الکی ساخته نمی‌شود
+  const flat = { prediction: { observable: 'x' } };
+  V.GATES.addCompetingExplanation(flat, V.countedBaseline(POSTS));
+  eq(flat.prediction.invalidatedBy.length, 0, 'هشدارِ همیشگی همان بی‌هشداری است');
+});
+
+t('«چه چیزی ابطال می‌شود» به مدل هم گفته می‌شود، نه فقط به کد', () => {
+  const p = V.STRATEGY_CARD_PROMPT({ knowledge: {}, insight: 'x', answers: {}, constraints: [],
+                                     fatigue: [], baselines: V.countedBaseline(REACH_DROP) });
+  ok(p.includes('چه چیزی ابطال می‌شود'), 'بخشش باید در پرامپت باشد');
+  ok(p.includes('رسیدن با واکنش قاطی نشود'), 'قاعده‌ی رسیدن/واکنش باید صریح باشد');
+  const props = V.STRATEGY_CARD_SCHEMA.properties.prediction.properties;
+  ok(props.invalidatedBy, 'اسکیما باید جای نوشتنش را داشته باشد');
+  eq(props.invalidatedBy.type, 'array');
+});
+
+// ═══ «چه شد؟» — بازدید هم پرسیده می‌شود، نه فقط کامنت ═══
+
+t('خط پایه‌ی رسیدن لحظه‌ی تأیید ثبت می‌شود', async () => {
+  const { startFollowUp } = await import('../lib/followUp.js');
+  const b = V.countedBaseline(REACH_DROP);
+  const card = { prediction: { observable: 'کامنت بیشتر می‌شود', checkAfterDays: 14 },
+                 measurement: { countable: true, metric: 'کامنت هر پست', baseline: null },
+                 cells: { action: { value: 'در کامنت کلمه‌ی «تست» را بنویس' } } };
+  V.GATES.fillBaseline(card, b);
+  V.GATES.addCompetingExplanation(card, b);
+
+  const run = { stages: { strategy: card } };
+  const f = startFollowUp(run);
+  ok(f.reach, 'بدون خط پایه‌ی رسیدن، دو هفته بعد عددِ واکنش قابل تفسیر نیست');
+  eq(f.reach.perPost, 1000, 'از پنجره‌ی اخیر، مثل بقیه‌ی خط پایه‌ها');
+  eq(f.reach.posts, 3);
+  ok(f.competingExplanation, 'توضیح رقیب تا «چه شد؟» سفر می‌کند، نه اینکه در کارت جا بماند');
+
+  // و در وضعیت سررسید هم بیرون می‌آید، وگرنه رابط چیزی برای نشان‌دادن ندارد
+  const { followUpStatus } = await import('../lib/followUp.js');
+  const st = followUpStatus(run, { now: Date.parse(f.dueAt) + 1000 });
+  eq(st.state, 'due');
+  eq(st.reach.perPost, 1000);
+  ok(st.competingExplanation);
+});
+
+t('رابط «چه شد؟» بازدید را هم می‌پرسد و هم می‌فرستد', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ui = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  ok(/id="fu_v"/.test(ui), 'باید جایی برای عددِ بازدید باشد — با کامنتِ تنها نتیجه تفسیرپذیر نیست');
+  ok(/بازدید هر پست \(رسیدن\)/.test(ui), 'و همان عدد باید به‌عنوان مشاهده‌ی جدا فرستاده شود');
+  ok(/r\.reach\?\.perPost/.test(ui), 'شمارش خودکار هم باید بازدید را پر کند');
+  ok(/invalidatedBox/.test(ui), '«چه چیزی ابطالش می‌کند» باید در کارت دیده شود');
+});
+
+t('«تقصیرِ رسیدن بود» بدون عددِ شمرده‌شده پذیرفته نمی‌شود', () => {
+  // محافظ دوم: اگر مدل اجازه داشته باشد علت را حدس بزند، هیچ فرضیه‌ای رد نمی‌شود.
+  const mk = () => ({ hypothesisUpdates: [
+    { hypothesis: 'مردم اصالت می‌خواهند', verdict: 'inconclusive', attributedBy: 'counted' }] });
+
+  const bare = mk();
+  const r1 = V.GATES.checkAttribution(bare, [{ what: 'آنچه کاربر دید', note: 'هیچی', how: 'user_said' }]);
+  eq(r1.pass, false);
+  eq(bare.hypothesisUpdates[0].verdict, 'weakened', 'انتساب بی‌عدد به weakened برمی‌گردد');
+  ok(bare.hypothesisUpdates[0].attributionDowngraded, 'و بی‌صدا هم برنمی‌گردد');
+
+  const withNum = mk();
+  const r2 = V.GATES.checkAttribution(withNum, [
+    { what: 'بازدید هر پست (رسیدن)', note: '900 — در زمان تأیید 1000 بود', how: 'counted' }]);
+  eq(r2.pass, true);
+  eq(withNum.hypothesisUpdates[0].verdict, 'inconclusive', 'با عددِ واقعی، انتساب سر جایش می‌ماند');
+
+  // حکم‌های دیگر دست‌نخورده می‌مانند
+  const other = { hypothesisUpdates: [{ hypothesis: 'x', verdict: 'weakened', attributedBy: 'none' }] };
+  eq(V.GATES.checkAttribution(other, []).pass, true);
+  eq(V.GATES.checkAttribution(null, []).pass, true, 'نبودِ حکم، خطا نیست');
 });
 
 // ═══ لایه‌ی OpenAI — مانده، ولی فقط «چطور حرف بزنیم» ═══
@@ -1465,6 +2182,23 @@ t('کارت می‌گوید با چه چیزی رصد می‌شود — روی �
   eq(draw(null), '', 'کارت قدیمی بدون measurement نباید بترکد');
   eq(draw({ countable: true, metric: 'کامنت', baseline: '۴' }), '',
      'وقتی خط پایه هست و شمردنی است، چیز اضافه‌ای نشان داده نمی‌شود');
+
+  // ولی خط پایه‌ای که کد شمرده باید دیده شود — عددش واقعی است و کاربر باید
+  // بتواند از عددِ حدسی تشخیصش بدهد
+  const counted = draw({ countable: true, metric: 'کامنت',
+                         baseline: 'میانگین ۱۶۹ کامنت در هر پست (۳ پست اخیر)',
+                         baselineOrigin: 'counted_by_code' });
+  ok(counted.includes('۱۶۹') && counted.includes('شمرده شده'), `خط پایه‌ی شمرده‌شده باید دیده شود: ${counted}`);
+  ok(draw({ countable: true, baseline: null, baselineNote: 'هیچ پستی با آمار نبود' }).includes('شمرده نشد'),
+     'نبودِ خط پایه هم باید گفته شود');
+
+  // برشِ پنجره باید به چشم کاربر برسد، وگرنه فقط در JSON مانده است
+  const NOTE = 'اخیراً روند بالا رفته؛ مبنا را از ۳ پست آخر گرفتم';
+  ok(draw({ countable: true, baseline: 'میانگین ۶۵ کامنت در هر پست (۳ پست اخیر)',
+            baselineOrigin: 'counted_by_code', baselineTrend: NOTE }).includes('روند بالا رفته'),
+     'اختلافِ پنجره باید کنار خط پایه‌ی شمرده‌شده دیده شود');
+  ok(draw({ countable: true, baseline: 'الان ۶۵ تا', baselineTrend: NOTE }).includes('روند بالا رفته'),
+     'خط پایه‌ی خودِ مدل هم بدون این جمله نمایش داده نمی‌شود');
 
   const first = draw({ countable: true, countFirst: 'قبل از شروع، کامنت‌های هر پست را بشمار', baseline: null });
   ok(first.includes('قبل از شروع'), `شمردنِ خط پایه باید دیده شود: ${first}`);

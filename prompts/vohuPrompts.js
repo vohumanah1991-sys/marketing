@@ -719,7 +719,7 @@ export const QUESTIONS_SCHEMA = {
    بدون تأیید این، هیچ محتوایی ساخته نمی‌شود.
    ══════════════════════════════════════════════════════════ */
 
-export const STRATEGY_CARD_PROMPT = ({ knowledge, insight, answers, constraints, fatigue }) => `
+export const STRATEGY_CARD_PROMPT = ({ knowledge, insight, answers, constraints, fatigue, baselines }) => `
 ${VOHU_CORE}
 
 # مأموریت: ساخت کارت استراتژی
@@ -737,6 +737,9 @@ ${j(answers)}
 
 چیزهایی که گفته درباره‌شان حرف نزنم:
 ${j(constraints)}
+
+خط پایه‌های شمرده‌شده (کد شمرده، از آمار عمومی پست‌ها — حدس نیست):
+${baselines ? j(baselines) : '(هیچ پستی با آمار در دست نبود — خط پایه شمردنی نیست)'}
 
 ## قبل از هر چیز — حکم خستگی نخ‌ها
 
@@ -840,7 +843,24 @@ A را درست می‌کنی B بدترین می‌شود، B را درست م�
 - **عدد هدف** — چقدر، تا کی
 - **خط پایه** — عدد امروز. بدون این معلوم نیست از کجا به کجا.
 
-خط پایه را از شناخت بردار؛ آمار پست‌ها همان‌جاست. **حدس نزن.**
+خط پایه را از **خط پایه‌های شمرده‌شده‌ی بالا** بردار — آنها را کد از آمار عمومی پست‌ها
+شمرده و عددشان واقعی است. **حدس نزن.**
+اگر آن بالا عددی برای متریکت هست، همان را در \`baseline\` بنویس و نشانه‌ی موفقیت را
+با همان عدد بساز («کامنت هر پست از ۸۸ به ۱۲۰»)، نه با صفت.
+
+سه قاعده درباره‌ی همان عدد، و هر سه اجباری‌اند:
+
+۱. **به‌ازای هر پست، نه مجموع.** «۸۸ کامنت در هر پست» یک خط پایه است؛
+   «۱۰۵۶ کامنت» یک عدد بی‌مصرف است که با تعداد پست بالا و پایین می‌رود.
+۲. **از پنجره‌ی اخیر، نه کل تاریخ.** \`recent\` را بردار، نه \`all\` — مگر اینکه
+   \`recent\` برای آن متریک عددی نداشته باشد.
+۳. **اگر \`trend\` برای متریکت \`diverged: true\` است، صریح بگو.** یعنی پنجره‌ی اخیر
+   با کل تاریخ اختلاف زیاد دارد و انتخابِ پنجره خودش یک تصمیم است. در
+   \`measurement.baselineTrend\` بنویس روند بالا رفته یا پایین آمده، مبنا را از چند
+   پست آخر گرفتی و کل تاریخ چه عددی می‌گفت — مثل:
+   «اخیراً روند بالا رفته؛ مبنا را از ۳ پست آخر گرفتم (۶۵ کامنت در هر پست)، نه از
+   میانگین ۱۲ پست (۱۶ کامنت).»
+   بی این جمله، دو هفته بعد هر عددی بین آن دو، موفقیت به نظر می‌رسد.
 
 اگر خط پایه در شناخت نبود، نشانه‌ی مبهم ننویس. به‌جایش:
 
@@ -872,6 +892,21 @@ A را درست می‌کنی B بدترین می‌شود، B را درست م�
 درست: «زیر پست‌ها کامنت سایز می‌پرسند — الان هیچ‌کس نمی‌پرسد.»
 غلط: «نرخ تبدیل ۱۲٪ رشد می‌کند.» — به این عدد دسترسی نداریم.
 غلط: «دایرکت‌ها بیشتر می‌شود.» — دایرکت را نمی‌توانیم بشماریم.
+
+### و «چه چیزی ابطال می‌شود» — \`prediction.invalidatedBy\`
+
+پیش‌بینی‌ای که هیچ‌چیز ابطالش نمی‌کند، پیش‌بینی نیست. دست‌کم یک چیز بنویس که
+اگر اتفاق بیفتد، این کارت را رد می‌کند — و هر **توضیح رقیبی** که ممکن است
+نتیجه را بسازد بی‌آنکه ربطی به محتوا داشته باشد.
+
+⚠️ **رسیدن با واکنش قاطی نشود.** به \`trend\` در خط پایه‌های شمرده‌شده نگاه کن:
+اگر متریکِ **رسیدن** (بازدید/پخش) نزولی است در حالی که متریکِ **واکنش**
+(کامنت/لایک) ثابت مانده، همین‌جا صریح بنویس که افت رسیدن یک توضیح رقیب است.
+وگرنه دو هفته بعد «کامنت ثابت ماند» را به پای بدبودن محتوا می‌نویسیم، در حالی
+که محتوا **به‌ازای هر بیننده** بهتر شده و فقط کمتر دیده شده.
+
+مثال: «اگر بازدید هر پست باز هم افت کند و کامنت ثابت بماند، این کارت رد نشده —
+مسئله رسیدن است نه محتوا. اول بازدید را نگاه کن، بعد درباره‌ی محتوا حکم بده.»
 `.trim();
 
 /**
@@ -968,7 +1003,10 @@ export const STRATEGY_CARD_SCHEMA = {
           description: 'با ابزارهای ما شمردنی است؟ کامنت/لایک/بازدید/اشتراک آری — دایرکت/سیو/ریچ/فروش نه' },
         metric:    { type: 'string', description: 'دقیقاً چه چیزی شمرده می‌شود' },
         baseline:  { type: ['string', 'null'],
-          description: 'عدد امروز. اگر در شناخت نبود null — حدس زده نمی‌شود.' },
+          description: 'عدد امروز، به‌ازای هر پست و از پنجره‌ی اخیر — نه مجموع و نه کل تاریخ. اگر در شناخت نبود null — حدس زده نمی‌شود.' },
+        // انتخابِ پنجره خودش یک برش است؛ برشِ بی‌صدا دو هفته بعد هر عددی را موفقیت نشان می‌دهد
+        baselineTrend: { type: ['string', 'null'],
+          description: 'اگر پنجره‌ی اخیر با کل تاریخ اختلاف زیاد دارد (trend.diverged): روند بالا رفته یا پایین آمده، مبنا از چند پست آخر گرفته شد و کل تاریخ چه عددی می‌گفت' },
         countFirst: { type: ['string', 'null'],
           description: 'وقتی خط پایه نامعلوم است: «قبل از شروع، X را بشمار». قدم اول کاربر همین است.' },
         blindSpot: { type: ['string', 'null'],
@@ -980,7 +1018,13 @@ export const STRATEGY_CARD_SCHEMA = {
       required: ['observable', 'checkAfterDays'],
       properties: {
         observable:     { type: 'string', description: 'چیزی که کاربر با چشم خودش می‌بیند' },
-        checkAfterDays: { type: 'integer' }
+        checkAfterDays: { type: 'integer' },
+        // بدون این، دو هفته بعد هر نتیجه‌ای به پای محتوا نوشته می‌شود
+        invalidatedBy: {
+          type: 'array', items: { type: 'string' },
+          description: 'چه چیزهایی این پیش‌بینی را ابطال می‌کنند، یا توضیح رقیبِ نتیجه‌اند — '
+                     + 'مثلاً افت رسیدن (بازدید/پخش) که واکنش ثابت را «جواب نداد» جلوه می‌دهد'
+        }
       }
     },
     riskiestAssumption: { type: 'string', description: 'اگر این غلط باشد، کل کارت می‌ریزد' },
@@ -1028,6 +1072,22 @@ ${j(hypothesisHistory)}
 - **inconclusive** — آزمایش خودش معتبر نبود (اجرا ناقص، زمان کم، نمونه کم)
 - **contradicted** — نتیجه‌ی برعکس دیده شد
 
+## قبل از حکم — رسیدن را از واکنش جدا کن
+
+اگر کارت در \`prediction.invalidatedBy\` یا \`prediction.reachConfound\` گفته بود که
+افت رسیدن یک توضیح رقیب است، **اول همان را بررسی کن**. در مشاهده‌ها دنبال
+عددِ «بازدید هر پست (رسیدن)» بگرد:
+
+- بازدید افت کرده و واکنش ثابت مانده → **inconclusive** با
+  \`attributedBy: "counted"\`، نه weakened. محتوا به‌ازای هر بیننده بهتر شده و
+  فقط کمتر دیده شده. حکم‌دادن درباره‌ی محتوا اینجا حکمِ اشتباه است و دور بعد
+  را هم خراب می‌کند.
+- بازدید بالا رفته و واکنش هم بالا رفته → بخشی از رشد از رسیدن است، نه از
+  محتوا. **supported** فقط وقتی که واکنش بیشتر از رسیدن رشد کرده باشد.
+- بازدید ثابت مانده → واکنش را می‌شود به محتوا نسبت داد.
+- عددِ بازدید اصلاً در مشاهده‌ها نیست → **حق نداری افت رسیدن را فرض بگیری.**
+  نبودِ عدد، مجوزِ حدس نیست: حکم را طبق محافظ دوم بگذار.
+
 ## محافظ اول — بازنشستگی اجباری
 
 سابقه را نگاه کن. **فرضیه‌ای که سه بار آزمایش شده و هیچ‌بار supported نشده، بازنشسته می‌شود.**
@@ -1051,8 +1111,15 @@ ${j(hypothesisHistory)}
 ## محافظ دوم — انتساب علت فقط از کاربر
 
 اگر پیش‌بینی محقق نشد، **تو حق نداری خودت تصمیم بگیری که تقصیر اجرا بود.**
-فقط اگر کاربر خودش دلیلی گفته باشد (در userReason) می‌توانی inconclusive بگذاری.
-اگر کاربر دلیلی نگفته، حالت weakened است — نه inconclusive.
+دو راه — و فقط همین دو — inconclusive را مجاز می‌کند:
+
+- کاربر خودش دلیلی گفته باشد (در userReason) → \`attributedBy: "user"\`
+- عددِ شمرده‌شده‌ی رسیدن خودش علت را نشان بدهد → \`attributedBy: "counted"\`.
+  فقط وقتی که عددِ «بازدید هر پست (رسیدن)» **واقعاً در مشاهده‌ها باشد** و افت
+  کرده باشد. عددی که نیست، دلیل نیست — و کد همین را بررسی می‌کند، پس
+  \`counted\` بی‌عدد به weakened برمی‌گردد.
+
+اگر هیچ‌کدام، حالت weakened است — نه inconclusive.
 
 چرایش ساده است: اگر خودت اجازه داشته باشی علت را حدس بزنی، برای هر شکستی بهانه می‌تراشی و هیچ فرضیه‌ای هرگز رد نمی‌شود.
 
@@ -1093,8 +1160,9 @@ export const LEARNING_SCHEMA = {
                            description: 'محافظ اول: ۳ آزمایش بدون supported → true' },
           promoteToFact: { type: 'boolean',
                            description: 'چند بار supported → قابل ارتقا به fact' },
-          attributedBy:  { type: 'string', enum: ['user', 'none'],
-                           description: 'محافظ دوم: inconclusive فقط با attributedBy=user مجاز است' }
+          attributedBy:  { type: 'string', enum: ['user', 'counted', 'none'],
+                           description: 'محافظ دوم: inconclusive فقط با user (کاربر علت را گفت) یا '
+                                      + 'counted (عددِ شمرده‌شده‌ی رسیدن علت را نشان داد) مجاز است — هرگز از حدس خودت' }
         }
       }
     },
@@ -1607,6 +1675,14 @@ dropOrder را بنویس: شماره‌ی **همه‌ی قطعه‌های قا�
 قطعه‌هایی که هسته‌ی کمپین‌اند و بدونشان چیزی باقی نمی‌ماند، اصلاً در این فهرست نمی‌آیند.
 هر پیشوندی از این فهرست که حذف شود، باقی‌مانده باید همچنان یک کمپین کامل باشد.
 
+⚠️ **dropOrder خالی، یک ادعاست — نه یک میان‌بر.** یعنی «حتی یک قطعه هم قابل حذف نیست».
+اگر واقعاً این‌طور است، در \`dropOrderNote\` بنویس چرا هر قطعه هسته است و بدونش چه چیزی می‌شکند.
+خالی‌گذاشتن هر دو یعنی وقتی ظرفیت کم بیاید — که می‌آید — کاربر خودش سرخود یکی را
+حذف می‌کند و دو هفته بعد هیچ‌کس نمی‌داند چه چیزی آزموده شد.
+
+و اگر از capacity.realisticTotal **کمتر** ساختی، در \`fewerPiecesWhy\` بنویس چرا.
+کم‌ساختن ممکن است درست باشد؛ کم‌ساختنِ بی‌توضیح یک برشِ بی‌صداست.
+
 ## گام شش — هر قطعه چه چیزی نباید بگوید
 
 از restrictedClaims و constraints بردار. این جلوی کار اضافه در دروازه‌ی شواهد را می‌گیرد.
@@ -1660,6 +1736,15 @@ export const CAMPAIGN_SCHEMA = {
     dropOrder: {
       type: 'array', items: { type: 'integer' },
       description: 'شماره‌ی قطعه‌ها به ترتیبِ حذف، اگر ظرفیت کم آمد'
+    },
+    // خالی‌بودن dropOrder یک ادعاست: «هیچ‌چیز قابل حذف نیست». ادعا دلیل می‌خواهد.
+    dropOrderNote: {
+      type: ['string', 'null'],
+      description: 'اگر dropOrder خالی است: چرا هیچ قطعه‌ای قابل حذف نیست'
+    },
+    fewerPiecesWhy: {
+      type: ['string', 'null'],
+      description: 'اگر از capacity.realisticTotal کمتر ساختی: چرا'
     },
 
     channel: { type: 'string' }
@@ -2021,15 +2106,157 @@ export function realisticCapacity({ statedPerWeek, card, windowDays, history = [
     ? done.reduce((s, h) => s + Math.min(1, h.published / h.planned), 0) / done.length
     : 0.6;
 
+  // ⚠️ واحد: کل قطعه‌ها در تمام پنجره، نه در هفته
+  const realisticTotal = Math.max(1, Math.round(stated * weeks * ratio));
+  const statedTotal    = Math.max(1, Math.round(stated * weeks));
+
   return {
     statedPerWeek:  stated,
     windowDays:     days,
     ratio:          Number(ratio.toFixed(2)),
     basedOn:        done.length ? `${done.length} دور معتبر گذشته` : 'ضریب پیش‌فرض — هنوز سابقه‌ای نیست',
     excluded:       history.length - done.length,   // دورهایی که به دلیل بیرونی کنار گذاشته شدند
-    // ⚠️ واحد: کل قطعه‌ها در تمام پنجره، نه در هفته
-    realisticTotal: Math.max(1, Math.round(stated * weeks * ratio)),
-    statedTotal:    Math.max(1, Math.round(stated * weeks))
+    realisticTotal,
+    statedTotal,
+    // برشِ خودِ ظرفیت — عددی که تا امروز فقط از تفاضل دو عدد دیگر فهمیده می‌شد.
+    // هر برشی که نوشته نشود، دو هفته بعد انگار هرگز اتفاق نیفتاده.
+    cut: statedTotal > realisticTotal
+      ? { from: statedTotal, to: realisticTotal, count: statedTotal - realisticTotal,
+          why: done.length
+            ? `${done.length} دور معتبر گذشته: به‌طور میانگین ${Math.round(ratio * 100)}٪ از برنامه واقعاً منتشر شده`
+            : `ضریب پیش‌فرض ${ratio} — هنوز سابقه‌ای نیست که بگوید چقدر از برنامه منتشر می‌شود` }
+      : null
+  };
+}
+
+/**
+ * خط پایه — از آمار عمومی پست‌هایی که خوانده‌ایم، **شمرده** نه حدس‌زده.
+ *
+ * چرا در کد: قاعده‌ی «خط پایه را از شناخت بردار، حدس نزن» تا امروز شلیک نمی‌کرد،
+ * چون هیچ‌وقت عددی جلوی مدل نبود — مرحله‌ی کارت فقط شناختِ متنی می‌گیرد و
+ * آمار پست‌ها آنجا نیست. عددی که کد می‌داند، از مدل پرسیده نمی‌شود.
+ *
+ * null یعنی هیچ پستی آمار نداشت. عددِ ساختگی از نبودِ عدد بدتر است.
+ */
+export function countedBaseline(posts = [], { recent = 3, divergeRatio = 1.5, divergeFloor = 3 } = {}) {
+  const withStats = (posts || []).filter(p =>
+    p && (p.comments != null || p.likes != null || p.views != null));
+  if (!withStats.length) return null;
+
+  // تازه‌ترین‌ها اول — «سه پست اخیر» یعنی سه پست اخیر، نه سه تای اول فهرست
+  const sorted = [...withStats].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+
+  // ⚠️ به‌ازای هر پست، نه مجموع — و تقسیم بر پست‌هایی که *واقعاً این عدد را داشتند*.
+  // Number(null) صفر است: بدون این فیلتر، پستی که آمارش را نداده بود مثل پستِ
+  // صفر شمرده می‌شد و خط پایه را بی‌صدا پایین می‌کشید.
+  const avg = (list, k) => {
+    const ns = list.map(p => p?.[k]).filter(v => v != null && Number.isFinite(Number(v))).map(Number);
+    return ns.length ? { value: Math.round(ns.reduce((a, b) => a + b, 0) / ns.length), n: ns.length } : null;
+  };
+  const mk = list => {
+    const c = { comments: avg(list, 'comments'), likes: avg(list, 'likes'), views: avg(list, 'views') };
+    return { posts: list.length,
+             comments: c.comments?.value ?? null, likes: c.likes?.value ?? null, views: c.views?.value ?? null,
+             // چند پست پشتِ هر عدد است — «میانگین ۱۲ پست» وقتی فقط ۳ تاشان عدد داشتند، دروغ است
+             n: { comments: c.comments?.n ?? 0, likes: c.likes?.n ?? 0, views: c.views?.n ?? 0 } };
+  };
+
+  const recentBlock = mk(sorted.slice(0, recent));
+  const allBlock    = mk(sorted);
+
+  // اختلافِ پنجره‌ی اخیر با کل تاریخ. اگر زیاد باشد، خط پایه باید خودش بگوید
+  // از کجا آمده — وگرنه دو هفته بعد هر عددی موفقیت به نظر می‌رسد.
+  const trend = {};
+  for (const k of ['comments', 'likes', 'views']) {
+    const r = recentBlock[k], a = allBlock[k];
+    if (r == null || a == null || allBlock.n[k] <= recentBlock.n[k]) continue;  // پنجره = کل تاریخ، مقایسه بی‌معنی
+    const ratio = a === 0 ? (r === 0 ? 1 : Infinity) : r / a;
+    trend[k] = {
+      recent: r, recentPosts: recentBlock.n[k],
+      all: a,    allPosts: allBlock.n[k],
+      ratio: Number.isFinite(ratio) ? Number(ratio.toFixed(2)) : null,
+      direction: r > a ? 'up' : r < a ? 'down' : 'flat',
+      diverged: Math.abs(r - a) >= divergeFloor
+             && (ratio >= divergeRatio || ratio <= 1 / divergeRatio)
+    };
+  }
+
+  return {
+    recentN: Math.min(recent, sorted.length),
+    recent:  recentBlock,
+    all:     allBlock,
+    trend,
+    // خودِ قاعده همراه عددها می‌رود، تا مدل مجبور نباشد حدس بزند کدام را برداریم
+    rule: 'مبنا از پنجره‌ی اخیر برداشته می‌شود، نه از کل تاریخ؛ و به‌ازای هر پست است، نه مجموع. '
+        + 'هر متریکی که در trend مقدار diverged=true دارد، باید همراه خط پایه صریح گفته شود.',
+    source:  'آمار عمومی پست‌های خوانده‌شده — شمرده شده، حدس نیست',
+    countedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * جمله‌ی صریحِ اختلافِ پنجره — نوشته می‌شود چه عدد را کد گذاشته باشد چه مدل.
+ *
+ * `ours` یعنی خودِ ما پنجره را انتخاب کرده‌ایم و می‌توانیم بگوییم «از سه پست آخر
+ * گرفتم». وقتی عدد را مدل نوشته، نمی‌دانیم از کدام پنجره برداشته — پس ادعایش
+ * را نمی‌کنیم و فقط هر دو عدد را رو می‌کنیم. جمله‌ی درست‌نما بدتر از سکوت است.
+ */
+function baselineTrendNote(tr, fa, { ours = true } = {}) {
+  const dir = tr.direction === 'up' ? 'بالا رفته' : 'پایین آمده';
+  const span = `هر عددی بین ${Math.min(tr.recent, tr.all)} و ${Math.max(tr.recent, tr.all)} موفقیت به نظر می‌رسد`;
+  return ours
+    ? `اخیراً روند ${dir}؛ مبنا را از ${tr.recentPosts} پست آخر گرفتم `
+      + `(${tr.recent} ${fa} در هر پست)، نه از میانگین ${tr.allPosts} پست (${tr.all} ${fa}). `
+      + `بدون این، ${span}.`
+    : `اخیراً روند ${dir}: ${tr.recentPosts} پست آخر ${tr.recent} ${fa} در هر پست، `
+      + `ولی میانگین ${tr.allPosts} پست ${tr.all} ${fa} است. خط پایه‌ی بالا باید از پنجره‌ی اخیر باشد، `
+      + `نه از کل تاریخ — وگرنه ${span}.`;
+}
+
+/** متریکِ نوشته‌شده به کدام عددِ شمرده‌شده وصل است. چیزی که نشناسیم، جا می‌ماند. */
+const BASELINE_METRICS = [
+  { key: 'comments', fa: 'کامنت',  re: /کامنت|نظر|comment/i },
+  { key: 'likes',    fa: 'لایک',   re: /لایک|پسند|like/i },
+  { key: 'views',    fa: 'بازدید', re: /بازدید|ویو|پخش|view/i }
+];
+
+/** رسیدن و واکنش دو چیزند و قاطی‌کردنشان یعنی حکمِ اشتباه درباره‌ی محتوا. */
+const REACH_METRICS    = ['views'];
+const REACTION_METRICS = ['comments', 'likes'];
+
+/**
+ * توضیحِ رقیب — رسیدن افت کرده، ولی واکنش سر جایش مانده.
+ *
+ * چرا در کد: این تشخیص ریاضی است، نه قضاوت. اگر بازدیدِ هر پست نصف شده باشد
+ * و کامنت هر پست ثابت مانده باشد، یعنی محتوا **به‌ازای هر بیننده بهتر** شده —
+ * ولی هر کسی که فقط کامنت را نگاه کند می‌گوید «فرقی نکرد» و محتوا را محکوم
+ * می‌کند. حکمی که علتش را اشتباه بگیرد، دور بعد را هم خراب می‌کند.
+ *
+ * null یعنی رسیدن و واکنش هم‌جهت‌اند و توضیح رقیبی از این جنس در کار نیست.
+ */
+export function reachConfound(baseline) {
+  const tr = baseline?.trend || {};
+  const fa = k => BASELINE_METRICS.find(x => x.key === k)?.fa || k;
+
+  // فقط افتِ *معنادار* رسیدن — نوسان کوچک توضیح رقیب نیست
+  const rk = REACH_METRICS.find(k => tr[k]?.diverged && tr[k].direction === 'down');
+  if (!rk) return null;
+
+  // و فقط وقتی واکنش تکان نخورده. اگر واکنش هم افتاده، دو عدد یک چیز می‌گویند.
+  const steady = REACTION_METRICS.filter(k => tr[k] && !tr[k].diverged);
+  if (!steady.length) return null;
+
+  const reach = tr[rk];
+  const said = steady.map(k => `${fa(k)} تقریباً ثابت مانده (${tr[k].recent} در برابر ${tr[k].all})`).join(' و ');
+  return {
+    reach:  { metric: rk, recent: reach.recent, all: reach.all, ratio: reach.ratio,
+              recentPosts: reach.recentPosts, allPosts: reach.allPosts },
+    steady: steady.map(k => ({ metric: k, recent: tr[k].recent, all: tr[k].all })),
+    sentence:
+      `${fa(rk)} هر پست افت کرده (${reach.recent} در برابر ${reach.all} در کل تاریخ) در حالی که ${said}. `
+      + `پس اگر این کارت جواب نداد، «محتوا بد بود» تنها توضیح نیست — افت رسیدن یک توضیح رقیب است `
+      + `و همین حالا هم در جریان است. قبل از هر حکمی درباره‌ی محتوا، اول ${fa(rk)} هر پست را نگاه کن: `
+      + `اگر ${fa(rk)} باز هم افتاده و واکنش ثابت مانده، محتوا به‌ازای هر بیننده بهتر شده، نه بدتر.`
   };
 }
 
@@ -2397,6 +2624,168 @@ export const GATES = {
   // دروازه ۳ — آیا جمله‌ی اول قابل نمایش است؟
   canShowInsight(insight) {
     return { pass: insight.confident >= 0.6, reason: insight.fallback };
+  },
+
+  /**
+   * دروازه‌ی خط پایه — عددی که کد شمرده، در کارت می‌نشیند.
+   *
+   * قاعده‌ی «خط پایه لازم است» در پرامپت بود ولی هرگز شلیک نمی‌کرد: مرحله‌ی
+   * کارت هیچ‌وقت آمار پست‌ها را نمی‌دید، پس null گذاشتن تنها کار صادقانه بود.
+   * حالا عددها را کد می‌شمارد و همین‌جا می‌نشاند — با برچسبِ اینکه شمرده شده،
+   * نه اینکه مدل گفته.
+   *
+   * کارت را جا‌به‌جا می‌کند (mutate) و گزارش می‌دهد چه شد.
+   */
+  fillBaseline(card, baseline) {
+    const m = card?.measurement;
+    if (!m) return { pass: false, reason: 'کارت اصلاً measurement ندارد' };
+    if (!baseline) {
+      // نبودِ عدد خودش یک واقعیت است و باید نوشته شود، نه اینکه سکوت شود
+      if (m.baseline == null && !m.baselineNote)
+        m.baselineNote = 'هیچ پستی با آمار عمومی در دست نبود — خط پایه شمردنی نبود';
+      return { pass: true, filled: null, reason: 'آماری برای شمردن نبود' };
+    }
+
+    m.countedFrom = baseline;                       // عددها همیشه همراه کارت می‌مانند
+
+    const text = `${m.metric || ''} ${card?.cells?.successSignal?.value || ''}`;
+    const hit = BASELINE_METRICS.find(x => x.re.test(text));
+
+    // برشِ پنجره — خط پایه از چند پست اخیر آمده و کل تاریخ عدد دیگری می‌گوید.
+    // این جمله قبل از هر خروجِ زودهنگام نوشته می‌شود: چه عدد را ما گذاشته باشیم
+    // چه مدل، انتخابِ پنجره یک برش است و برشِ بی‌صدا ممنوع.
+    // اگر مدل خودش این جمله را نوشته، بازنویسی نمی‌شود — فقط جای خالی پر می‌شود.
+    const tr = hit ? baseline.trend?.[hit.key] : null;
+    if (tr?.diverged && !m.baselineTrend)
+      m.baselineTrend = baselineTrendNote(tr, hit.fa, { ours: m.baseline == null });
+
+    if (m.baseline != null)
+      return { pass: true, filled: null, trend: m.baselineTrend || null, reason: 'مدل خودش خط پایه داده بود' };
+
+    // پنجره‌ی اخیر مقدم است بر کل تاریخ — کل تاریخ فقط وقتی که اخیر عددی ندارد
+    const fromRecent = baseline.recent?.[hit?.key] != null;
+    const n = hit ? (baseline.recent?.[hit.key] ?? baseline.all?.[hit.key]) : null;
+
+    if (n == null) {
+      m.baselineNote = hit
+        ? `عددِ «${hit.fa}» در آمار عمومی این پست‌ها نبود`
+        : 'متریک کارت به هیچ‌کدام از عددهای شمردنی (کامنت/لایک/بازدید) وصل نشد';
+      return { pass: true, filled: null, reason: m.baselineNote };
+    }
+
+    // دامنه با تعداد پستی که *واقعاً این عدد را داشت* نوشته می‌شود، نه با طول فهرست
+    const posts = (fromRecent ? baseline.recent : baseline.all).n?.[hit.key]
+               ?? (fromRecent ? baseline.recentN : baseline.all.posts);
+    const scope = fromRecent ? `${posts} پست اخیر` : `${posts} پست خوانده‌شده`;
+    m.baseline = `میانگین ${n} ${hit.fa} در هر پست (${scope})`;
+    m.baselineOrigin = 'counted_by_code';
+    // وقتی مجبور شدیم به کل تاریخ برگردیم، همان‌جا گفته شود — نه اینکه سکوت شود
+    if (!fromRecent && !m.baselineTrend)
+      m.baselineTrend = `${baseline.recentN} پست اخیر عددِ «${hit.fa}» نداشتند؛ مبنا از کل ${posts} پست خوانده‌شده گرفته شد، نه از پنجره‌ی اخیر.`;
+    return { pass: true, filled: { metric: hit.key, value: n, scope, fromRecent },
+             trend: m.baselineTrend || null };
+  },
+
+  /**
+   * دروازه‌ی انتساب — «تقصیرِ رسیدن بود» فقط با عددی که واقعاً شمرده شده.
+   *
+   * محافظ دوم تا امروز فقط در پرامپت بود و هیچ سدی نداشت: مدل می‌توانست هر
+   * شکستی را inconclusive کند و هیچ فرضیه‌ای هرگز رد نشود. حالا که
+   * `attributedBy: "counted"` هم مجاز شده، بی‌سد گذاشتنش یعنی یک در تازه برای
+   * همان بهانه‌تراشی. پس کد بررسی می‌کند عددِ رسیدن **واقعاً** در مشاهده‌ها
+   * هست یا نه، و اگر نبود حکم را به weakened برمی‌گرداند.
+   *
+   * `learning` را جا‌به‌جا می‌کند (mutate) و می‌گوید چه چیزی برگردانده شد.
+   */
+  checkAttribution(learning, observations = []) {
+    const ups = learning?.hypothesisUpdates;
+    if (!Array.isArray(ups)) return { pass: true, downgraded: [], reason: 'حکمی برای بررسی نبود' };
+
+    // عددِ رسیدن فقط وقتی «شمرده شده» است که how=counted باشد و عددی در متنش باشد
+    const counted = observations.some(o =>
+      o?.how === 'counted' && /رسیدن|بازدید|ویو|پخش/.test(String(o.what || '')) && /\d/.test(String(o.note ?? '')));
+
+    const downgraded = [];
+    for (const u of ups) {
+      if (u?.verdict !== 'inconclusive' || u.attributedBy !== 'counted' || counted) continue;
+      downgraded.push({ hypothesis: u.hypothesis,
+                        why: 'انتساب به افت رسیدن ادعا شد ولی عددِ شمرده‌شده‌ی بازدید در مشاهده‌ها نبود' });
+      u.verdict = 'weakened';
+      u.attributedBy = 'none';
+      u.attributionDowngraded = 'عددِ رسیدن شمرده نشده بود';
+    }
+    return { pass: downgraded.length === 0, downgraded, hadCountedReach: counted };
+  },
+
+  /**
+   * دروازه‌ی توضیحِ رقیب — «چه چیزی این پیش‌بینی را ابطال می‌کند».
+   *
+   * قاعده‌ی «فقط محتوا را نسنج» در پرامپت گفتنی است ولی ضمانت ندارد: مدل هر
+   * بار که یادش برود، دو هفته بعد افتِ رسیدن به پای محتوا نوشته می‌شود و
+   * درسِ غلط در حافظه‌ی کسب‌وکار می‌ماند. عددها دست کد است، پس حکمش هم.
+   *
+   * کارت را جا‌به‌جا می‌کند (mutate) و گزارش می‌دهد چه اضافه شد.
+   */
+  addCompetingExplanation(card, baseline) {
+    const p = card?.prediction;
+    if (!p) return { pass: false, reason: 'کارت پیش‌بینی ندارد' };
+
+    const c = reachConfound(baseline);
+    const list = Array.isArray(p.invalidatedBy) ? p.invalidatedBy
+               : p.invalidatedBy ? [p.invalidatedBy] : [];
+    p.invalidatedBy = list;
+
+    if (!c) return { pass: true, added: null,
+                     reason: 'رسیدن و واکنش هم‌جهت‌اند — توضیح رقیبی از این جنس در کار نیست' };
+
+    p.reachConfound = c;                            // عددها همراه کارت می‌مانند
+    // اگر مدل خودش گفته باشد، دوباره نوشته نمی‌شود — ولی سکوتش پر می‌شود
+    if (list.some(x => /رسیدن|بازدید|ویو|پخش|reach/i.test(String(x))))
+      return { pass: true, added: null, confound: c, reason: 'مدل خودش افت رسیدن را آورده بود' };
+
+    list.push(c.sentence);
+    return { pass: true, added: c.sentence, confound: c };
+  },
+
+  /**
+   * دروازه‌ی برشِ بی‌صدا — چیزی حذف شده و کسی ننوشته کدام و چرا.
+   *
+   * دو برش پشت سر هم اتفاق می‌افتد و هیچ‌کدام تا امروز ثبت نمی‌شد:
+   *   ۱. ظرفیت اعلامی → ظرفیت واقع‌بینانه (کار کد، دلیلش هم دست کد است)
+   *   ۲. ظرفیت واقع‌بینانه → آنچه مدل واقعاً برنامه‌ریزی کرد
+   * و یک برشِ **آینده** که باید از قبل تصمیمش گرفته شده باشد: dropOrder.
+   * dropOrder خالی یعنی ادعای «هیچ قطعه‌ای قابل حذف نیست» — ادعای بزرگی است
+   * و بدون دلیل نوشته‌شده پذیرفته نمی‌شود.
+   */
+  checkCuts(campaign, capacity) {
+    const planned = campaign?.pieces?.length ?? 0;
+    const cuts = [], unexplained = [];
+
+    // اجراهای قدیمی cut ندارند — از همان دو عددی که ذخیره شده بازش می‌سازیم،
+    // وگرنه برشِ دیروز برای همیشه نانوشته می‌ماند.
+    const cut = capacity?.cut ?? (capacity?.statedTotal > capacity?.realisticTotal
+      ? { from: capacity.statedTotal, to: capacity.realisticTotal,
+          count: capacity.statedTotal - capacity.realisticTotal,
+          why: capacity.basedOn ? `ضریب واقع‌بینی ${capacity.ratio} — ${capacity.basedOn}` : null }
+      : null);
+
+    if (cut) cuts.push({ what: 'ظرفیت اعلامی', from: cut.from, to: cut.to,
+                         count: cut.count, why: cut.why, by: 'code' });
+
+    if (capacity?.realisticTotal > planned)
+      cuts.push({ what: 'قطعه‌های برنامه', from: capacity.realisticTotal, to: planned,
+                  count: capacity.realisticTotal - planned,
+                  why: campaign?.fewerPiecesWhy || null, by: 'model' });
+
+    const dropOrder = campaign?.dropOrder;
+    if (planned > 1 && !(dropOrder || []).length && !campaign?.dropOrderNote)
+      unexplained.push({ what: 'ترتیب حذف',
+        why: 'هیچ قطعه‌ای قابل‌حذف اعلام نشد و دلیلش هم نوشته نشد — اگر ظرفیت کم بیاید، '
+           + 'کاربر خودش سرخود یکی را حذف می‌کند و آن‌وقت نمی‌شود فهمید چه چیزی آزموده شد' });
+
+    for (const c of cuts) if (!c.why) unexplained.push({ what: c.what, why: 'چرایی این برش نوشته نشد' });
+
+    return { pass: unexplained.length === 0, cuts, unexplained, planned };
   },
 
   // دروازه ۴ — آیا محتوا قابل انتشار است؟

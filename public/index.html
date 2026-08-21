@@ -508,7 +508,9 @@ function igScreen(){
 async function igStart(){
   const target = val('ig_t');
   if(!target){ alert('آدرس یا آی‌دی پیج را بنویس.'); return; }
-  const body = { target,
+  // اجرای جاری همراه می‌رود تا تحلیل‌ها در رکورد همان اجرا بمانند.
+  // بیرون از اجرا (استخراج سرِخود) خالی است و سرور هم چیزی نمی‌چسباند.
+  const body = { target, url,
     posts: Number(val('ig_p')), reels: Number(val('ig_r')),
     withMedia: $('#ig_m').checked };
   $('#ig_out').innerHTML = '<p class="sm">در حال ثبت کار…</p>';
@@ -700,6 +702,22 @@ function sendAns(){
 function measureBox(m){
   if (!m) return '';
   let h = '';
+  // اینجا فقط چیزی گفته می‌شود که کاربر باید بداند و خودش نمی‌داند.
+  // خط پایه‌ای که *کد شمرده* یکی از آنهاست: عددش واقعی است و باید بشود
+  // از عددی که مدل حدس زده تشخیصش داد. خط پایه‌ی معمولی همان‌جا در کارت است.
+  // انتخابِ پنجره یک برش است: عددِ سه پست اخیر با میانگین کل تاریخ فرق دارد و
+  // اگر نگوییم از کدام گرفتیم، دو هفته بعد هر عددی بینشان موفقیت به نظر می‌رسد.
+  const trend = m.baselineTrend
+    ? `<div class="sm" style="margin-top:6px">⚠ ${esc(m.baselineTrend)}</div>` : '';
+  if (m.baseline && m.baselineOrigin === 'counted_by_code')
+    h += `<div class="card"><b>خط پایه‌ی امروز</b>
+      <div class="v">${esc(m.baseline)}</div>
+      <div class="sm" style="margin-top:6px">از آمار عمومی پست‌ها شمرده شده، نه حدس.</div>${trend}</div>`;
+  // خط پایه‌ی خودِ مدل جای دیگری در کارت نشان داده می‌شود؛ اینجا فقط برشِ پنجره می‌ماند
+  else if (m.baseline)
+    h += trend ? `<div class="sm" style="margin:10px 0">${trend}</div>` : '';
+  else if (m.baselineNote)
+    h += `<div class="sm" style="margin:10px 0">خط پایه شمرده نشد — ${esc(m.baselineNote)}</div>${trend}`;
   if (m.countFirst)
     h += `<div class="card" style="border-color:#ecdcae;background:var(--ambs)"><b>قبل از شروع</b>
       <div class="v">${esc(m.countFirst)}</div>
@@ -707,6 +725,20 @@ function measureBox(m){
   if (m.countable === false)
     h += `<div class="gate">${esc(m.blindSpot || 'نتیجه‌ی این اقدام با ابزارهای ما دیده نمی‌شود — باید خودت بشماری.')}</div>`;
   return h;
+}
+
+/**
+ * «چه چیزی این پیش‌بینی را ابطال می‌کند» — همان‌جا، زیر خود پیش‌بینی.
+ *
+ * بدون این، دو هفته بعد هر نتیجه‌ای به پای محتوا نوشته می‌شود. توضیحِ رقیب
+ * وقتی به درد می‌خورد که **قبل** از دیدن نتیجه گفته شده باشد، نه بعدش.
+ */
+function invalidatedBox(p){
+  const list = Array.isArray(p?.invalidatedBy) ? p.invalidatedBy.filter(Boolean) : [];
+  if (!list.length) return '';
+  return `<div class="sm" style="margin-top:10px"><b>چه چیزی ابطالش می‌کند</b>
+    <ul style="margin:6px 0 0;padding-inline-start:18px">${
+      list.map(x=>`<li style="margin-bottom:4px">${esc(x)}</li>`).join('')}</ul></div>`;
 }
 
 /**
@@ -723,15 +755,23 @@ function followUp(){
   <div class="card"><b>پیش‌بینی من این بود</b><div class="v">${esc(f.observable)}</div></div>
   ${f.action?`<div class="card"><b>اقدامی که خواسته بودیم</b><div class="v">${esc(f.action)}</div></div>`:''}
   ${f.metric?`<div class="card"><b>چه چیزی را می‌سنجیم</b><div class="v">${esc(f.metric)}</div>
-    <div class="sm" style="margin-top:6px">خط پایه: ${f.baseline?esc(f.baseline):'— (نداشتیم)'}</div></div>`:''}
+    <div class="sm" style="margin-top:6px">خط پایه: ${f.baseline?esc(f.baseline):'— (نداشتیم)'}</div>
+    ${f.baselineTrend?`<div class="sm" style="margin-top:6px">⚠ ${esc(f.baselineTrend)}</div>`:''}</div>`:''}
+  ${f.reach?`<div class="card"><b>رسیدن — جدا از واکنش</b>
+    <div class="v">${f.reach.perPost} بازدید در هر پست، در زمان تأیید</div>
+    <div class="sm" style="margin-top:6px">از ${f.reach.posts} پست${f.reach.fromRecent?' اخیر':' خوانده‌شده'}.
+      واکنش را بدون این عدد نمی‌شود تفسیر کرد.</div></div>`:''}
+  ${f.competingExplanation?`<div class="gate">${esc(f.competingExplanation)}</div>`:''}
   ${f.blindSpot?`<div class="gate">${esc(f.blindSpot)}</div>`:''}
 
-  ${f.keyword?`<button class="g" onclick="countAuto()">خودم بشمارم — کامنت‌های «${esc(f.keyword)}»</button>
-    <div id="cnt" class="sm" style="margin-top:8px"></div>`
-   :`<p class="sm">این اقدام کلیدواژه‌ی مشخصی ندارد که خودم بشمارم، پس از خودت می‌پرسم.</p>`}
+  <button class="g" onclick="countAuto()">خودم بشمارم — ${f.keyword?`کامنت‌های «${esc(f.keyword)}» و بازدید`:'بازدید هر پست'}</button>
+  <div id="cnt" class="sm" style="margin-top:8px"></div>
+  ${f.keyword?'':`<p class="sm">این اقدام کلیدواژه‌ی مشخصی ندارد که خودم بشمارم، پس عددِ واکنش را از خودت می‌پرسم — ولی بازدید را خودم می‌خوانم.</p>`}
 
   <label class="sm" style="display:block;margin-top:16px">چند تا شد؟ (اگر نمی‌دانی، خالی بگذار)</label>
   <input id="fu_n" type="number" min="0" dir="ltr" style="text-align:left" placeholder="عدد">
+  <label class="sm">بازدید هر پست الان چقدر است؟ (بدون این، عددِ بالا قابل تفسیر نیست)</label>
+  <input id="fu_v" type="number" min="0" dir="ltr" style="text-align:left" placeholder="میانگین بازدید هر پست">
   <label class="sm">چه چیزی دیدی؟</label>
   <textarea id="fu_t" placeholder="هرچه دیدی — حتی «هیچ اتفاقی نیفتاد»"></textarea>
   <p class="sm">«جواب نداد» هم جواب است. همان‌قدر ثبت می‌شود که «جواب داد».</p>
@@ -745,18 +785,30 @@ async function countAuto(){
   try{
     const r = await (await fetch('/api/followup/count', {method:'POST',
       headers:{'content-type':'application/json'}, body: JSON.stringify({url})})).json();
-    if (r.count == null) { box.textContent = 'نشد بشمارم — ' + (r.why||'دلیلش معلوم نیست') + '. دستی بنویس.'; return; }
-    box.textContent = `${r.count} کامنت منطبق در ${r.scanned} محتوا`;
+    // بازدید حتی وقتی کامنت شمرده نشد برمی‌گردد — و همان‌جا نوشته می‌شود
+    const v = $('#fu_v'); if (v && r.reach?.perPost != null) v.value = r.reach.perPost;
+    const reachLine = r.reach ? '<div style="margin-top:4px">' + esc(r.reach.note || (r.reach.perPost + ' بازدید در هر پست')) + '</div>' : '';
+    if (r.count == null) {
+      box.innerHTML = esc('نشد کامنت‌ها را بشمارم — ' + (r.why||'دلیلش معلوم نیست') + '. دستی بنویس.') + reachLine;
+      return;
+    }
+    box.innerHTML = esc(`${r.count} کامنت منطبق در ${r.scanned} محتوا`) + reachLine;
     const n = $('#fu_n'); if (n) n.value = r.count;
   }catch(e){ box.textContent = 'نشد بشمارم: ' + e.message + '. دستی بنویس.'; }
 }
 
 function closeLoop(){
   if (busy) return;
-  const raw = val('fu_n'), text = val('fu_t');
+  const raw = val('fu_n'), views = val('fu_v'), text = val('fu_t');
   // عددِ نداده، null می‌ماند. صفرِ ساختگی، دور بعد را هم خراب می‌کند.
   const obs = [];
   if (raw !== '') obs.push({ what: S.followUp?.metric || 'شمارش', note: raw, how: 'counted' });
+  // رسیدن جداگانه ثبت می‌شود، با خط پایه‌اش — وگرنه واکنش قابل تفسیر نیست
+  if (views !== '') {
+    const was = S.followUp?.reach?.perPost;
+    obs.push({ what: 'بازدید هر پست (رسیدن)', how: 'counted',
+               note: views + (was!=null ? ` — در زمان تأیید ${was} بود` : '') });
+  }
   if (text)       obs.push({ what: 'آنچه کاربر دید', note: text, how: 'user_said' });
   if (!obs.length){ alert('دست‌کم یکی را پر کن — عدد یا توضیح.'); return; }
   spin('نتیجه را می‌خوانم و یاد می‌گیرم…', false);
@@ -788,7 +840,8 @@ function strategy(){
   ${measureBox(c.measurement)}
   ${c.reachCaveat?`<div class="gate">${esc(c.reachCaveat)}</div>`:''}
   <div class="card"><b>پیش‌بینی من</b><div class="v">${esc(c.prediction?.observable)}</div>
-    <div class="sm" style="margin-top:6px">${c.prediction?.checkAfterDays??14} روز بعد همین را می‌پرسم.</div></div>
+    <div class="sm" style="margin-top:6px">${c.prediction?.checkAfterDays??14} روز بعد همین را می‌پرسم.</div>
+    ${invalidatedBox(c.prediction)}</div>
   <div class="more" onclick="tog('rk')">خطرناک‌ترین فرض این برنامه چیست؟</div>
   <div class="fold" id="rk"><div class="card" style="border-color:#f0c7c3;background:#fefaf9">
     <div class="sm">${esc(c.riskiestAssumption)}</div></div></div>
@@ -823,6 +876,22 @@ function usageBar(){
        + (u.unpriced ? ` · هزینه‌ی ${u.unpriced} فراخوان نامعلوم (${esc(u.model||'')})` : '')
        + `</p>`;
 }
+/**
+ * «چه چیزی حذف شد و چرا» — برشِ بی‌صدا همان چیزی است که دو هفته بعد
+ * هیچ‌کس نمی‌فهمد از کجا آمده. عددها را کد بریده؛ اینجا فقط خوانده می‌شوند.
+ */
+function cutsBox(c){
+  const cuts = c.cuts || [];
+  const un   = c.cutsUnexplained || [];
+  if (!cuts.length && !un.length) return '';
+  return `<div class="card"><b>چه چیزی حذف شد</b>
+    ${cuts.map(x=>`<div class="sm" style="margin-top:6px">✂ ${esc(x.what)}: ${x.from} → ${x.to}
+      <span style="opacity:.75">(${x.count} کمتر)</span><br>${esc(x.why||'دلیلش نوشته نشد')}</div>`).join('')}
+    ${c.dropOrderNote?`<div class="sm" style="margin-top:6px">ترتیب حذف: ${esc(c.dropOrderNote)}</div>`:''}
+    ${(c.dropOrder||[]).length?`<div class="sm" style="margin-top:6px">اگر ظرفیت کم آمد، به همین ترتیب حذف کن: ${(c.dropOrder||[]).join('، ')}</div>`:''}
+    ${un.map(x=>`<div class="gate" style="margin-top:8px">${esc(x.what)} — ${esc(x.why)}</div>`).join('')}</div>`;
+}
+
 function campaign(){
   const c = S.campaign || {};
   M.innerHTML = `<div class="day">کمپین</div>
@@ -836,6 +905,7 @@ function campaign(){
     <div class="v">${esc(c.varies?.what)}</div>
     <div class="sm" style="margin-top:6px">${esc(c.varies?.why)}</div></div>
   ${c.capacityCheck?`<p class="sm">ظرفیت: ${c.capacityCheck.statedTotal} قطعه اگر حرفت درست باشد → ${c.capacityCheck.realisticTotal} واقع‌بینانه</p>`:''}
+  ${cutsBox(c)}
   <hr style="border:none;border-top:1px solid var(--line);margin:26px 0">
   <div class="day">قبل از انتشار</div>
   <h2>متن را اینجا بگذار تا چک کنم</h2>

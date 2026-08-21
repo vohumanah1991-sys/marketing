@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { check, timed, buildId } from './lib/selftest.js';
 import { startRun, getRun, advance, normalizeSource, restoredInfo, rankCandidates } from './lib/session.js';
-import { saveRun, storeDir } from './services/store.js';
+import { saveRun, storeDir, docExists, slug } from './services/store.js';
 import { checkContent } from './lib/pipeline.js';
 import { followUpStatus, countComments, closeLoop } from './lib/followUp.js';
 import { runAsUser } from './lib/userContext.js';
@@ -307,7 +307,8 @@ app.post('/api/check', guard(async (req, res) => {
   const { report, gate } = await checkContent({
     content: req.body.content,
     knowledge: run.stages.knowledge,
-    market: run.stages.market
+    market: run.stages.market,
+    run                                  // حکم روی رکورد اجرا می‌نشیند، نه فقط روی صفحه
   });
   res.json({ gate, claims: report.claims });
 }));
@@ -322,7 +323,15 @@ registerHandler('ig-sync', async (payload, report) => {
   if (payload.analyze === false) return { ...sync, analysis: null };
 
   await report({ note: 'استخراج تمام شد — شروع تحلیل' });
-  const analysis = await analyzeItems(sync.newItems, report);
+  // استخراج به یک پیج بند است، نه به یک اجرا — پس اجرا اختیاری است. ولی وقتی
+  // کاربر از داخل یک اجرا استخراج می‌کند، تحلیل باید در رکورد همان اجرا بماند
+  // و با تمام‌شدنِ این کار پس‌زمینه نرود.
+  // loadRun برای آدرس ناشناس یک اجرای خالی *می‌سازد* — پس اول وجودش پرسیده
+  // می‌شود، وگرنه یک استخراج سرِخود یک رکورد توخالی روی دیسک جا می‌گذارد.
+  const run = payload.url && await docExists('run', slug(payload.url))
+    ? await getRun(payload.url).catch(() => null)
+    : null;
+  const analysis = await analyzeItems(sync.newItems, report, { run });
   return { ...sync, analysis };
 });
 
@@ -336,6 +345,7 @@ app.post('/api/instagram/sync', guard(async (req, res) => {
   const limits = resolveLimits({ posts: req.body.posts, reels: req.body.reels });
   const job = await createJob('ig-sync', {
     target,
+    url:       String(req.body.url || '').trim() || null,   // اجرای جاری، اگر از داخل اجرا آمده
     withMedia: req.body.withMedia !== false,
     force:     Boolean(req.body.force),
     analyze:   req.body.analyze !== false,

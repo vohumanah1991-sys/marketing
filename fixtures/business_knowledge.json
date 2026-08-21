@@ -548,122 +548,122 @@
   "productUsability": [
     {
       "product": "دستگاه فرکننده باد سرد شیگلم",
-      "usable": true,
+      "usable": "yes",
       "reason": null
     },
     {
       "product": "کرم ضدلک نامبوزین شماره ۵",
-      "usable": true,
+      "usable": "yes",
       "reason": null
     },
     {
       "product": "ضدآفتاب کلاژن گلو مدی‌کیوب",
-      "usable": true,
+      "usable": "yes",
       "reason": null
     },
     {
       "product": "آمپول آبرسان سنتلا اسکین 1004",
-      "usable": true,
+      "usable": "yes",
       "reason": null
     },
     {
       "product": "آمپول جمع‌کننده منافذ سنتلا",
-      "usable": true,
+      "usable": "yes",
       "reason": null
     },
     {
       "product": "پنکک برنز مات Stay Matte نیکس",
-      "usable": false,
+      "usable": "no",
       "reason": "no_price"
     },
     {
       "product": "پنکک فول‌کاور Bell",
-      "usable": false,
+      "usable": "no",
       "reason": "out_of_stock"
     },
     {
       "product": "پنکک کرم‌پودری شیگلم",
-      "usable": false,
+      "usable": "no",
       "reason": "expired"
     },
     {
       "product": "پنکک مات ژاکسی",
-      "usable": false,
+      "usable": "no",
       "reason": "expired"
     },
     {
       "product": "پنکک مات لیوایت",
-      "usable": false,
+      "usable": "no",
       "reason": "out_of_stock"
     },
     {
       "product": "روغن رزماری و نعناع Mielle",
-      "usable": false,
+      "usable": "no",
       "reason": "out_of_stock"
     },
     {
       "product": "عطر مو ۱۰۰ میلی‌لیتر",
-      "usable": false,
+      "usable": "no",
       "reason": "out_of_stock"
     },
     {
       "product": "اسپری دوفاز طلایی Gliss",
-      "usable": false,
+      "usable": "no",
       "reason": "out_of_stock"
     },
     {
       "product": "اسپری دوفاز کراتینه Gliss",
-      "usable": false,
+      "usable": "no",
       "reason": "out_of_stock"
     },
     {
       "product": "اسپری BIO-TECH RESTORE",
-      "usable": false,
+      "usable": "no",
       "reason": "out_of_stock"
     },
     {
       "product": "اسپری Oil Nutritive",
-      "usable": false,
+      "usable": "no",
       "reason": "out_of_stock"
     },
     {
       "product": "اسپری دوفاز بیوکسین بنفش",
-      "usable": false,
+      "usable": "no",
       "reason": "out_of_stock"
     },
     {
       "product": "اسپری دوفاز لورآل Total Repair",
-      "usable": false,
+      "usable": "no",
       "reason": "out_of_stock"
     },
     {
       "product": "ژل پاک‌کننده گرین‌تی سیمپل",
-      "usable": true,
+      "usable": "yes",
       "reason": null
     },
     {
       "product": "میسلار واتر سیمپل Gently Removes",
-      "usable": true,
+      "usable": "yes",
       "reason": null
     },
     {
       "product": "میسلار واتر پوست حساس گارنیر ۲۰۰ میلی‌لیتر",
-      "usable": true,
+      "usable": "yes",
       "reason": null
     },
     {
       "product": "دستمال مرطوب سون کوئین ۲۷ عددی",
-      "usable": true,
+      "usable": "yes",
       "reason": null
     },
     {
       "product": "میسلار واتر دوفاز گارنیر ۱۰۰ میلی‌لیتر",
-      "usable": true,
+      "usable": "yes",
       "reason": null
     },
     {
       "product": "بوستر رتینال شات سلیمکس",
-      "usable": false,
+      "usable": "no",
       "reason": "contradiction"
     }
   ],

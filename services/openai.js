@@ -242,7 +242,9 @@ export async function callOpenAISchema({ prompt, schema, toolName = 'result', ma
   const effort = asked || DEFAULT_EFFORT;
 
   const route = openaiRoute(model);
-  const description = 'خروجی ساختاریافته را با این تابع برگردان.';
+  // همان جمله‌ی مسیر anthropic — هر فیلد با نوع خودش، نه یک رشته‌ی JSON
+  const description = 'خروجی ساختاریافته را با این تابع برگردان. '
+                    + 'هر فیلد با نوع خودش — هیچ فیلدی را به‌صورت رشته‌ی JSON نده و چند فیلد را داخل یکی نچپان.';
 
   const { body, args } = route === '/responses'
     ? await callResponses({ prompt, schema, toolName, description, maxTokens, timeoutMs, model, effort })
