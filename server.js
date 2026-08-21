@@ -183,8 +183,13 @@ app.get('/api/run/progress', guard(async (req, res) => {
 app.get('/api/run', guard(async (req, res) => {
   const run = await getRun(req.query.url);
   // این سر اصلاً چیزی نمی‌سازد — هرچه برمی‌گرداند از انبار است.
+  //
+  // ⚠ فقط updatedAt، نه createdAt: loadRun برای آدرسی که هیچ اجرایی ندارد هم
+  // یک شیء تازه با createdAt می‌سازد. با آن، اجرایی که **هرگز وجود نداشته**
+  // بنر «این نتیجه از قبل ذخیره شده بود» می‌گرفت — دقیقاً همان گمراهی که این
+  // بنر برای رفعش ساخته شده بود. updatedAt فقط روی اجرای واقعاً ذخیره‌شده هست.
   res.json(view({ run, needs: null, state: 'loaded', stages: Object.keys(run.stages || {}),
-                  restoredAt: run.updatedAt || run.createdAt || null }));
+                  restoredAt: run.updatedAt || null }));
 }));
 
 // رقبا
