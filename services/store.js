@@ -49,6 +49,36 @@ export function userDir() {
   return path.join(storeDir(), currentUser());
 }
 
+/**
+ * پشت این انبار چیست؟
+ *
+ * چند تست به *سازوکار* انبار کار دارند نه به مغز: اینکه پوشه کجاست، و اینکه
+ * جداسازیِ کاربر با runAsUser انجام می‌شود. روی میزبانی که انبارش SQLite
+ * تنانت است، هیچ‌کدام معنی ندارند — آنجا جداسازی در سطح فایلِ دیتابیس است و
+ * پوشه‌ای در کار نیست.
+ *
+ * تست‌ها با همین تصمیم می‌گیرند کدام ادعا را بسنجند، به‌جای اینکه ادعای
+ * بی‌ربط را رد کنند یا بدتر، بی‌صدا سبز نشان دهند.
+ */
+export const storeKind = () => 'files';
+
+/**
+ * یک انبارِ خالیِ تازه، برای تست.
+ *
+ * تست‌ها باید از صفر شروع کنند، وگرنه حالتِ اجرای قبلی خودش را جای نتیجه جا
+ * می‌زند — و آن تست به‌جای اینکه چیزی را ثابت کند، چیزی را پنهان می‌کند.
+ *
+ * «تازه» روی هر انبار معنی خودش را دارد: اینجا یک پوشه‌ی موقت، و روی انبار
+ * SQLite یک دیتابیس تنانتِ موقت. تست‌ها همین یک تابع را صدا می‌زنند و لازم
+ * نیست بدانند پشتش چیست — پس یک فایل تست روی هر دو میزبان کار می‌کند.
+ */
+export async function enterFreshStore() {
+  const { mkdtemp } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  process.env.VOHU_STORE_DIR = await mkdtemp(path.join(tmpdir(), 'vohu-store-'));
+  return process.env.VOHU_STORE_DIR;
+}
+
 /** پوشه را بساز اگر نیست. هر نویسنده‌ای از همین رد می‌شود. */
 export async function ensureDir(dir) {
   if (!existsSync(dir)) await mkdir(dir, { recursive: true });

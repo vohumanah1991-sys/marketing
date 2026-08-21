@@ -20,8 +20,10 @@ import path from 'node:path';
 let pass = 0, fail = 0;
 const ok = (c, m) => c ? (pass++, console.log(`  ✓ ${m}`)) : (fail++, console.log(`  ✗ ${m}`));
 
-const store = mkdtempSync(path.join(tmpdir(), 'vohu-once-'));
-process.env.VOHU_STORE_DIR = store;
+// انبارِ خالیِ تازه — روی هر میزبانی به شکل خودش. بدون این، تست حالتِ اجرای
+// قبلی را ارث می‌برد و به‌جای اینکه چیزی را ثابت کند، چیزی را پنهان می‌کند.
+const { enterFreshStore } = await import('../services/store.js');
+await enterFreshStore();
 
 const { apifyCalls, resetApifyCalls } = await import('../services/apify.js');
 const { startRun, advance } = await import('../lib/session.js');
@@ -106,19 +108,28 @@ ok(after?.items?.length === 3, 'استخراج تازه در تاریخچه ما
 // ── ۵ · انبار حالت خشک جداست ──────────────────────────────────
 // داده‌ی ساختگی اگر در تاریخچه‌ی واقعی بنشیند دفعه‌ی بعد دوباره استفاده
 // می‌شود و جای استخراج واقعی را می‌گیرد — یعنی تحلیل روی پستی که نبوده.
-const { storeDir } = await import('../services/store.js');
-const keep = process.env.VOHU_STORE_DIR;
+const { storeDir, storeKind } = await import('../services/store.js');
 
-delete process.env.VOHU_STORE_DIR;
-ok(storeDir() === '.vohu-dry', `در حالت خشک انبار جداست: ${storeDir()}`);
+// این سه ادعا به *سازوکار* انبار کار دارند، نه به مغز: پوشه کجاست و چه
+// نامی دارد. روی انبار SQLite تنانت پوشه‌ای در کار نیست، پس سنجیدنشان
+// بی‌معناست — رد می‌شوند و همین‌جا گفته می‌شود.
+if (storeKind() !== 'files') {
+  console.log('  ⓘ ۳ ادعای پوشه‌ی انبار رد شد — این میزبان انبارش '
+            + `«${storeKind()}» است، نه فایل`);
+} else {
+  const keep = process.env.VOHU_STORE_DIR;
 
-const dry = process.env.VOHU_DRY_RUN;
-delete process.env.VOHU_DRY_RUN;
-ok(storeDir() === '.vohu', `در حالت واقعی انبار .vohu است: ${storeDir()}`);
-process.env.VOHU_DRY_RUN = dry;
+  delete process.env.VOHU_STORE_DIR;
+  ok(storeDir() === '.vohu-dry', `در حالت خشک انبار جداست: ${storeDir()}`);
 
-process.env.VOHU_STORE_DIR = keep;
-ok(storeDir() === keep, 'VOHU_STORE_DIR صریح همیشه برنده است');
+  const dry = process.env.VOHU_DRY_RUN;
+  delete process.env.VOHU_DRY_RUN;
+  ok(storeDir() === '.vohu', `در حالت واقعی انبار .vohu است: ${storeDir()}`);
+  process.env.VOHU_DRY_RUN = dry;
+
+  process.env.VOHU_STORE_DIR = keep;
+  ok(storeDir() === keep, 'VOHU_STORE_DIR صریح همیشه برنده است');
+}
 
 console.log(`\n  ${pass} قبول · ${fail} رد\n`);
 process.exit(fail ? 1 : 0);

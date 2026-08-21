@@ -19,19 +19,20 @@ process.env.VOHU_FIXTURES = './fixtures';
 process.env.VOHU_MODEL    = 'dry';
 process.env.APIFY_TOKEN   = 'apify_api_FAKE_FOR_TEST';
 
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => c ? (pass++, console.log(`  ✓ ${m}`)) : (fail++, console.log(`  ✗ ${m}`));
 const eq = (a, b, m) => ok(a === b, `${m} — انتظار ${JSON.stringify(b)}، دریافت ${JSON.stringify(a)}`);
 
-process.env.VOHU_STORE_DIR = mkdtempSync(path.join(tmpdir(), 'vohu-loop-'));
+// انبارِ خالیِ تازه — روی انبار فایلی یک پوشه‌ی موقت، روی SQLite یک دیتابیس
+// تنانتِ موقت. همین یک خط باعث می‌شود این فایل روی هر دو میزبان کار کند.
+const { enterFreshStore } = await import('../services/store.js');
+await enterFreshStore();
 
 const { startRun, advance } = await import('../lib/session.js');
 const { loadMemory, memoryExists } = await import('../services/memory.js');
-const { userDir } = await import('../services/store.js');
+const { userDir, storeKind } = await import('../services/store.js');
 const { closeLoop, followUpStatus, actionKeyword, startFollowUp } = await import('../lib/followUp.js');
 const { runAsUser, currentUser } = await import('../lib/userContext.js');
 const { threadFatigue } = await import('../prompts/vohuPrompts.js');
@@ -82,11 +83,19 @@ eq(followUpStatus(r1.run).state, 'waiting', 'همین حالا هنوز سررس
 const due = followUpStatus(r1.run, { now: Date.parse(f.dueAt) + 1000 });
 eq(due.state, 'due', 'بعد از ۱۴ روز، سررسید رسیده است');
 
-// ── مسیرها زیر کاربر ──
-await runAsUser('tester-1', async () => {
-  ok(userDir().endsWith(`${path.sep}tester-1`),
-     `مسیرهای این کاربر زیر پوشه‌ی خودش است: ${userDir()}`);
-});
+// ── جداسازی کاربر ──
+// دو انبار، دو سازوکار: روی فایل با runAsUser و پوشه‌ی کاربر؛ روی SQLite
+// تنانت با فایلِ دیتابیسِ جدا و میدل‌ور تنانت. سنجیدنِ سازوکار *دیگری*
+// یعنی تستی که یا الکی رد می‌شود یا بدتر، الکی سبز است.
+const FILE_STORE = storeKind() === 'files';
+if (FILE_STORE) {
+  await runAsUser('tester-1', async () => {
+    ok(userDir().endsWith(`${path.sep}tester-1`),
+       `مسیرهای این کاربر زیر پوشه‌ی خودش است: ${userDir()}`);
+  });
+} else {
+  console.log(`  ⓘ ادعای پوشه‌ی کاربر رد شد — انبار این میزبان «${storeKind()}» است`);
+}
 
 console.log('\n── بستن حلقه ──');
 const closed = await runAsUser('tester-1', () => closeLoop(r1.run, {
@@ -135,8 +144,14 @@ await runAsUser('tester-1', async () => {
 });
 
 // ── داده‌ی دو کاربر قاطی نمی‌شود ──
-const mem2 = await runAsUser('tester-2', () => loadMemory(URL_));
-eq(mem2.campaignHistory.length, 0, 'تستر ۲ روی همان آدرس، حافظه‌ی تستر ۱ را نمی‌بیند');
+if (FILE_STORE) {
+  const mem2 = await runAsUser('tester-2', () => loadMemory(URL_));
+  eq(mem2.campaignHistory.length, 0, 'تستر ۲ روی همان آدرس، حافظه‌ی تستر ۱ را نمی‌بیند');
+} else {
+  // اینجا runAsUser کاری نمی‌کند و نباید هم بکند: جداسازی کارِ میدل‌ور
+  // تنانت است. آزمونش در scripts/test-tenant.js همان میزبان است.
+  console.log(`  ⓘ آزمون دو کاربره اینجا نه — انبار «${storeKind()}» جداسازی‌اش با تنانت است`);
+}
 
 // ── کلیدواژه‌ی شمارش ──
 eq(actionKeyword('در کامنت بنویس «اصالت» تا برایت بفرستم'), 'اصالت', 'کلیدواژه از داخل گیومه');

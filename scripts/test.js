@@ -22,8 +22,27 @@ import { openaiEnabled, openaiModel, openaiBase, redactOpenAI, faOpenAIError,
          isReasoningModel, openaiRoute, noteDroppedReasoningEffort,
          schemaIsStrict, readUsage, callOpenAISchema } from '../services/openai.js';
 
+import { existsSync } from 'node:fs';
+
 let pass = 0, fail = 0;
 const failures = [];
+
+/**
+ * تست‌هایی که به **پوسته‌ی این مخزن** کار دارند، نه به مغز.
+ *
+ * مغز (prompts/ و lib/ و services/) هرجا برود همان است و همه‌ی تست‌هایش باید
+ * سبز بمانند. ولی چند تست به `server.js` همین مخزن نگاه می‌کنند — هشدار سرورِ
+ * کهنه، ساختار خودآزمایی، سیم‌کشی دروازه‌ها. روی میزبانی که پوسته‌اش چیز
+ * دیگری است (مثلاً spark)، آن فایل اصلاً وجود ندارد و این ادعاها موضوعیت
+ * ندارند.
+ *
+ * رد می‌شوند، ولی **شمرده و گزارش** می‌شوند. تست بی‌صدا رد شده، یعنی پوششی
+ * که فکر می‌کنی داری و نداری.
+ */
+const SHELL_FILE = new URL('../server.js', import.meta.url);
+const hasShell = existsSync(SHELL_FILE);
+const skippedShell = [];
+const tShell = (name, fn) => hasShell ? t(name, fn) : skippedShell.push(name);
 
 const pending = [];
 function t(name, fn) {
@@ -444,7 +463,7 @@ t('ورودی بی‌معنی به پیش‌فرض برمی‌گردد و سقف
   ok(resolveLimits({posts:99999}).posts <= 200, 'سقف مطلق باید اعمال شود');
 });
 
-t('هیچ نام برند یا آدرسی در کد و رابط کاربری هاردکد نشده', async () => {
+tShell('هیچ نام برند یا آدرسی در کد و رابط کاربری هاردکد نشده', async () => {
   const { readFile } = await import('node:fs/promises');
   const files = ['public/index.html','lib/session.js','lib/igSync.js','lib/instagram.js',
                  'services/apify.js','services/media.js','server.js'];
@@ -1026,7 +1045,7 @@ t('تولید محتوا هم پشت همین سد است، نه فقط تأیی
   eq(V.GATES.canApproveCard(null).pass, true, 'نبودِ کارت نباید بترکد');
 });
 
-t('سد در هر دو در است — هم advance هم سرِ تأیید', async () => {
+tShell('سد در هر دو در است — هم advance هم سرِ تأیید', async () => {
   const { readFile } = await import('node:fs/promises');
   const ses = await readFile(new URL('../lib/session.js', import.meta.url), 'utf8');
   const srv = await readFile(new URL('../server.js', import.meta.url), 'utf8');
@@ -1040,7 +1059,7 @@ t('سد در هر دو در است — هم advance هم سرِ تأیید', asy
   ok(/app\.post\('\/api\/run\/confirm'/.test(srv), 'راه جواب‌دادن هم باید باشد');
 });
 
-t('تأیید کاربر، قول را به واقعیت تبدیل نمی‌کند', async () => {
+tShell('تأیید کاربر، قول را به واقعیت تبدیل نمی‌کند', async () => {
   const { readFile } = await import('node:fs/promises');
   const srv = await readFile(new URL('../server.js', import.meta.url), 'utf8');
   const block = srv.match(/app\.post\('\/api\/run\/confirm'[\s\S]*?\n\}\)\);/)[0];
@@ -1153,7 +1172,7 @@ t('رابط هر چهار برچسب را می‌شناسد و «قول» را �
   ok(/needsConfirmation\?/.test(ui), 'قولِ تأییدنشده باید روی صفحه دیده شود');
 });
 
-t('سرورِ کهنه سکوت نمی‌کند', async () => {
+tShell('سرورِ کهنه سکوت نمی‌کند', async () => {
   // ریشه‌ی «قاعده اعمال نشد»: پروسه ۲۸ دقیقه قبل از آن قاعده بالا آمده بود و
   // Node ماژول را دوباره نمی‌خواند؛ /api/version هم buildِ دیسک را می‌گفت.
   const { readFile } = await import('node:fs/promises');
@@ -1533,7 +1552,7 @@ t('یک بررسی که می‌ترکد، بقیه را با خودش نمی‌�
   ok(slow.error.includes('طول کشید'), slow.error);
 });
 
-t('هر بررسی خودآزمایی داخل try خودش است', async () => {
+tShell('هر بررسی خودآزمایی داخل try خودش است', async () => {
   const { readFile } = await import('node:fs/promises');
   const txt = await readFile(new URL('../server.js', import.meta.url), 'utf8');
   // هر checks.push باید از check( یا timed( رد شود — نه یک شیء لخت که
@@ -1542,7 +1561,7 @@ t('هر بررسی خودآزمایی داخل try خودش است', async () =>
   eq(naked.length, 0, `${naked.length} بررسی بدون try — باید داخل check() یا timed() باشند`);
 });
 
-t('شماره‌ی نسخه از git می‌آید، نه از فایلی که عقب می‌ماند', async () => {
+tShell('شماره‌ی نسخه از git می‌آید، نه از فایلی که عقب می‌ماند', async () => {
   const { buildId } = await import('../lib/selftest.js');
   const { existsSync } = await import('node:fs');
   const { fileURLToPath } = await import('node:url');
@@ -1566,6 +1585,9 @@ t('شماره‌ی نسخه از git می‌آید، نه از فایلی که �
 
 // ═══ گزارش ═══
 await Promise.all(pending);
+if (skippedShell.length)
+  console.log(`\n  ⓘ ${skippedShell.length} تستِ پوسته رد شد — این میزبان server.js مخزن vohu را ندارد:\n`
+    + skippedShell.map(n => `      · ${n}`).join('\n'));
 console.log(`\n  ${pass} قبول · ${fail} رد\n`);
 if (fail) {
   failures.forEach(f => console.log(`  ✗ ${f}\n`));
