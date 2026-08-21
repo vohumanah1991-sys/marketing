@@ -766,9 +766,48 @@ A را درست می‌کنی B بدترین می‌شود، B را درست م�
 
 ## قاعده‌ی حیاتی — منشأ هر خانه
 
-کنار **هر** خانه بنویس از کجا آمده: fact یا hypothesis.
-اگر بیش از نیمی از خانه‌ها hypothesis باشند، به‌جای کمپین، **آزمایش کوچک** پیشنهاد بده:
-یک تست کم‌هزینه که مهم‌ترین فرضیه را بسنجد.
+کنار **هر** خانه بنویس از کجا آمده. چهار برچسب هست، نه دو تا:
+
+| برچسب | یعنی |
+|---|---|
+| **fact** | شاهد مستقیم در چیزی که خواندیم. نقل‌قول پیوسته دارد. |
+| **commitment** | قولی درباره‌ی کاری که کسب‌وکار می‌کند یا خواهد کرد. |
+| **hypothesis** | استنباط تو از چند نشانه. شاهد مستقیم ندارد. |
+| **decision** | تصمیم خودت. نه یافته است نه حدس؛ تو انتخابش کردی. |
+
+### قاعده‌ی قول — جایی که بیشترین اشتباه رخ می‌دهد
+
+**هر جمله‌ای که می‌گوید کسب‌وکار چه کاری می‌کند یا خواهد کرد، تا وقتی نقل‌قول
+پیوسته از منبع خوانده‌شده نداشته باشد، commitment است — نه fact.**
+
+«پک را بر اساس بودجه‌ی شما می‌چینیم» یک واقعیت نیست؛ یک وعده است. اگر در هیچ
+پست و هیچ صفحه‌ای این خدمت گفته نشده، تو داری از طرف کسب‌وکار قول می‌دهی.
+کاربر باید اول تأییدش کند: needsConfirmation را true بگذار.
+
+برای هر fact میدان source را با **نقل‌قول پیوسته و عیناً** از متن خوانده‌شده پر کن.
+خلاصه‌کردن یا بازنویسی، نقل‌قول نیست. **کد این را چک می‌کند**: اگر نقل‌قول در متن
+پیدا نشود، آن خانه خودبه‌خود به commitment برمی‌گردد و تأیید کاربر می‌خواهد.
+پس چیزی از fact بودن به دست نمی‌آوری جز اینکه دروغ در بیاید.
+
+### کدام برچسب برای کدام خانه
+
+اسکیما خودش محدود می‌کند، ولی بدان چرا:
+
+- **هدف، اقدام، نشانه‌ی موفقیت → فقط decision.** اینها را *تو* انتخاب کرده‌ای.
+  اقدام یک تصمیم است، نه حدس. «حدس می‌زنم کاربر باید در کامنت بنویسد» بی‌معناست —
+  یا این را از او می‌خواهی یا نمی‌خواهی.
+- **مخاطب، کشش → fact یا hypothesis.** اینها یافته‌اند؛ یا شاهد دارند یا استنباط‌اند.
+- **پیام، دلیل باور → fact یا commitment یا hypothesis.** اینجا وعده‌ی کسب‌وکار
+  می‌نشیند، پس قاعده‌ی قول دقیقاً همین‌جا اعمال می‌شود.
+
+### آزمایش کوچک به‌جای کمپین
+
+از چهار خانه‌ای که می‌توانند حدس باشند (مخاطب، کشش، پیام، دلیل باور)، اگر **سه‌تا
+یا بیشتر** hypothesis بودند، به‌جای کمپین **آزمایش کوچک** پیشنهاد بده: یک تست
+کم‌هزینه که مهم‌ترین فرضیه را بسنجد. mode را small_test بگذار.
+
+(قبلاً این شمارش روی هر هفت خانه بود؛ حالا که سه خانه اصلاً نمی‌توانند hypothesis
+باشند، «بیش از نیمی» هرگز اتفاق نمی‌افتاد.)
 
 هرگز خانه‌ای را با ادعایی که پشتش چیزی نیست پر نکن. اگر نمی‌دانی، فرضیه‌ی صادقانه بساز و برچسبش بزن.
 
@@ -819,6 +858,43 @@ A را درست می‌کنی B بدترین می‌شود، B را درست م�
 غلط: «دایرکت‌ها بیشتر می‌شود.» — دایرکت را نمی‌توانیم بشماریم.
 `.trim();
 
+/**
+ * برچسب هر خانه — چهار تا، نه دو تا.
+ *
+ * با دو برچسب، هر چیزی که تصمیمِ خودمان بود «حدس» می‌شد و هر قولی که
+ * کسب‌وکار می‌داد «واقعیت». هر دو در یک اجرای واقعی دیده شد: «اقدام» با
+ * برچسب hypothesis آمد (اقدام تصمیم است، نه حدس) و «پیام» با برچسب fact
+ * درحالی‌که متنش یک وعده بود که در هیچ محتوایی نیامده بود.
+ */
+const ORIGIN_FA = {
+  fact:       'شاهد مستقیم در چیزی که خواندیم — نقل‌قول پیوسته دارد',
+  commitment: 'قولی درباره‌ی کاری که کسب‌وکار می‌کند یا خواهد کرد — تا کاربر تأیید نکند، شاهد نیست',
+  hypothesis: 'استنباط ما از چند نشانه — شاهد مستقیم ندارد',
+  decision:   'تصمیم خودمان. نه یافته است نه حدس؛ ما انتخابش کردیم.'
+};
+
+/**
+ * یک خانه با برچسب‌های مجازِ همان خانه.
+ *
+ * محدودکردن در اسکیما، نه تذکر در پرامپت: تا وقتی enum اجازه می‌داد،
+ * «اقدام: hypothesis» یک خروجی معتبر بود و هیچ‌چیز جلویش را نمی‌گرفت.
+ */
+const cell = (origins) => ({
+  type: 'object',
+  required: ['value', 'origin'],
+  properties: {
+    value:  { type: 'string' },
+    origin: { type: 'string', enum: origins,
+              description: origins.map(o => `${o} = ${ORIGIN_FA[o]}`).join('  ·  ') },
+    basis:  { type: 'string', description: 'کدام واقعیت یا کدام استنباط' },
+    // fact بدون این، fact نمی‌ماند. کد نقل‌قول را در متن خوانده‌شده می‌گردد.
+    source: { type: ['string', 'null'],
+              description: 'نقل‌قول پیوسته و عیناً از منبع خوانده‌شده. برای fact الزامی است و کد چکش می‌کند.' },
+    needsConfirmation: { type: 'boolean',
+              description: 'commitment تا وقتی کاربر تأییدش نکند true است' }
+  }
+});
+
 export const STRATEGY_CARD_SCHEMA = {
   type: 'object',
   required: ['options', 'recommended', 'cells', 'prediction', 'mode', 'measurement'],
@@ -855,13 +931,15 @@ export const STRATEGY_CARD_SCHEMA = {
       type: 'object',
       required: ['goal','audience','tension','message','reasonToBelieve','action','successSignal'],
       properties: {
-        goal:            { $ref: '#/$defs/cell' },
-        audience:        { $ref: '#/$defs/cell' },
-        tension:         { $ref: '#/$defs/cell' },
-        message:         { $ref: '#/$defs/cell' },
-        reasonToBelieve: { $ref: '#/$defs/cell' },
-        action:          { $ref: '#/$defs/cell' },
-        successSignal:   { $ref: '#/$defs/cell' }
+        // هدف و اقدام و نشانه، تصمیم‌اند — ما انتخابشان کردیم، پس «حدس» نیستند.
+        goal:            cell(['decision']),
+        audience:        cell(['fact', 'hypothesis']),
+        tension:         cell(['fact', 'hypothesis']),
+        // پیام و دلیل باور جایی‌اند که وعده‌ی کسب‌وکار می‌نشیند — commitment لازم دارند.
+        message:         cell(['fact', 'hypothesis', 'commitment']),
+        reasonToBelieve: cell(['fact', 'hypothesis', 'commitment']),
+        action:          cell(['decision']),
+        successSignal:   cell(['decision'])
       }
     },
     // بدون این، «جواب داد» یک حس است نه یک واقعیت. اسکیما جایش را باز
@@ -898,17 +976,6 @@ export const STRATEGY_CARD_SCHEMA = {
     // از GATES.usableProducts — کمپین فقط حول این‌ها ساخته می‌شود
     builtAround: { type: 'array', items: { type: 'string' },
       description: 'محصولاتی که الان قابل خریدند. کمپین حول محصول ناموجود ساخته نمی‌شود.' }
-  },
-  $defs: {
-    cell: {
-      type: 'object',
-      required: ['value', 'origin'],
-      properties: {
-        value:  { type: 'string' },
-        origin: { type: 'string', enum: ['fact', 'hypothesis'] },
-        basis:  { type: 'string', description: 'کدام واقعیت یا کدام استنباط' }
-      }
-    }
   }
 };
 
@@ -2211,6 +2278,65 @@ export const GATES = {
     return { pass: missing.length === 0, missing };
   },
 
+  /**
+   * دروازه‌ی «واقعیت» — fact بدون شاهدِ پیدا‌شدنی، fact نمی‌ماند.
+   *
+   * در یک اجرای واقعی، «پیام» با برچسب fact آمد و متنش وعده‌ای بود که در هیچ
+   * محتوایی نیامده بود. برچسب fact یعنی «این را خواندیم»؛ اگر نخوانده باشیمش،
+   * کل زنجیره روی یک ادعای ساختگی بنا می‌شود و بدتر، کاربر خیال می‌کند خودش
+   * قبلاً این را گفته.
+   *
+   * **دور نمی‌ریزد، برمی‌گرداند.** خانه به commitment + needsConfirmation
+   * تبدیل می‌شود: حرف سر جایش می‌ماند ولی صادقانه برچسب می‌خورد و کاربر باید
+   * تأییدش کند. انداختنِ خانه یعنی کارت ناقص و یک فراخوان پول‌داده هدر.
+   *
+   * کارت را در جا عوض می‌کند و می‌گوید چه چیزی عوض شد.
+   */
+  checkCellOrigins(card, readText) {
+    const changed = [];
+    const hay = normFa(readText);
+
+    for (const [name, c] of Object.entries(card?.cells || {})) {
+      if (!c || typeof c !== 'object') continue;
+      const allowed = allowedOrigins(name);
+
+      // برچسبی که این خانه اصلاً نمی‌پذیرد — کارت‌های ذخیره‌شده‌ی قبل از این
+      // قاعده این‌طورند («اقدام: hypothesis»). اگر خانه فقط یک برچسب مجاز
+      // دارد، جواب یکی است و حدسی در کار نیست.
+      if (allowed.length && !allowed.includes(c.origin)) {
+        if (allowed.length === 1) {
+          changed.push({ cell: name, from: c.origin, to: allowed[0], why: `این خانه فقط ${allowed[0]} می‌پذیرد` });
+          c.origin = allowed[0];
+        }
+        continue;                       // fact نبود، پس چک نقل‌قول موضوعیت ندارد
+      }
+
+      if (c.origin === 'fact') {
+        const q = normFa(c.source);
+        // نقل‌قول خیلی کوتاه شاهد نیست — «ارسال» در هر متنی پیدا می‌شود
+        const why = !q ? 'نقل‌قول ندارد'
+                  : q.length < 12 ? 'نقل‌قول کوتاه‌تر از آن است که شاهد باشد'
+                  : !hay.includes(q) ? 'نقل‌قول در چیزی که خواندیم پیدا نشد'
+                  : null;
+        if (why) {
+          // اگر این خانه قول را می‌پذیرد، به قول برمی‌گردد؛ وگرنه به اولین
+          // برچسب مجازِ دیگر. حرف دور ریخته نمی‌شود، فقط راست برچسب می‌خورد.
+          // ⚠ «fact» نمی‌تواند مقصد باشد — همان چیزی است که داریم ازش برمی‌گردیم.
+          const to = allowed.includes('commitment') ? 'commitment'
+                   : (allowed.find(o => o !== 'fact') || 'hypothesis');
+          c.downgradedFrom = 'fact';
+          c.downgradeReason = why;
+          c.origin = to;
+          changed.push({ cell: name, from: 'fact', to, why });
+        }
+      }
+
+      // هر قولی تا تأیید نشده، تأیید می‌خواهد — چه خودش این‌طور آمده باشد چه برگشته باشد
+      if (c.origin === 'commitment' && c.needsConfirmation !== true) c.needsConfirmation = true;
+    }
+    return { pass: changed.length === 0, changed };
+  },
+
   // دروازه ۲ — آیا اجازه‌ی تولید محتوا داریم؟
   canProduceContent(card) {
     if (!card?.approvedAt) return { pass: false, reason: 'کارت استراتژی تأیید نشده' };
@@ -2238,6 +2364,28 @@ export const GATES = {
     };
   }
 };
+
+/**
+ * یکسان‌سازی متن فارسی برای مقایسه‌ی نقل‌قول.
+ * ی/ك عربی، نیم‌فاصله، گیومه و نقطه‌گذاری — هیچ‌کدام نباید فرق نقل‌قول با
+ * اصل باشند. بدون این، نقل‌قولِ درست هم پیدا نمی‌شد و همه چیز commitment می‌شد.
+ */
+/**
+ * برچسب‌های مجاز یک خانه — از خود اسکیما، نه یک فهرست دوم.
+ * فهرست دوم روزی با اسکیما فرق می‌کند و آن روز هیچ‌کس نمی‌فهمد.
+ */
+function allowedOrigins(name) {
+  return STRATEGY_CARD_SCHEMA.properties.cells.properties[name]?.properties?.origin?.enum || [];
+}
+
+function normFa(s) {
+  return String(s ?? '')
+    .replace(/[يى]/g, 'ی').replace(/ك/g, 'ک')
+    .replace(/[\u200c\u200e\u200f]/g, ' ')
+    .replace(/[«»"'’‘`،,.…؟?!:;()\[\]{}\-–—_*]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function hasValue(obj, path) {
   const v = path.split('.').reduce((o, k) => o?.[k], obj);

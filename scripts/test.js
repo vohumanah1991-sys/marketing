@@ -992,6 +992,126 @@ const STORED = {
   }
 };
 
+// ── برچسب هر خانه: چهار تا، و هرکدام جای خودش ────────────────
+// از یک اجرای واقعی (farideh.gilaseh): «پیام» با برچسب fact آمد ولی متنش
+// وعده‌ای بود که در هیچ محتوایی نیامده بود، و «اقدام» با برچسب hypothesis —
+// درحالی‌که اقدام تصمیم است، نه حدس.
+
+const CELLS = V.STRATEGY_CARD_SCHEMA.properties.cells.properties;
+
+t('اقدام نمی‌تواند حدس باشد — اسکیما اجازه نمی‌دهد', () => {
+  for (const k of ['goal', 'action', 'successSignal']) {
+    const e = CELLS[k].properties.origin.enum;
+    eq(e.join(','), 'decision', `${k} را ما انتخاب کرده‌ایم، پس فقط تصمیم است`);
+  }
+  for (const k of ['audience', 'tension'])
+    ok(!CELLS[k].properties.origin.enum.includes('decision'), `${k} یافته است، نه تصمیم`);
+  for (const k of ['message', 'reasonToBelieve'])
+    ok(CELLS[k].properties.origin.enum.includes('commitment'),
+       `${k} جایی است که وعده‌ی کسب‌وکار می‌نشیند، پس باید بتواند «قول» باشد`);
+  ok(CELLS.message.properties.source, 'هر خانه باید جای نقل‌قول داشته باشد');
+});
+
+t('پرامپت می‌گوید هر «کاری که می‌کنیم»، تا نقل‌قول نداشته باشد قول است', () => {
+  const p = V.STRATEGY_CARD_PROMPT({ knowledge: {}, insight: 'x', answers: {}, constraints: [], fatigue: {} });
+  ok(/commitment/.test(p) && /decision/.test(p), 'هر چهار برچسب باید معرفی شوند');
+  ok(/چه کاری می‌کند یا خواهد کرد/.test(p), 'قاعده‌ی قول باید صریح باشد');
+  ok(/نقل‌قول پیوسته/.test(p), 'و شرطش نقل‌قول پیوسته است');
+  ok(/کد این را چک می‌کند/.test(p), 'و مدل باید بداند کد چکش می‌کند');
+  // شمارش آزمایش کوچک باید با enum تازه جور باشد، وگرنه هرگز شلیک نمی‌کند
+  ok(/سه‌تا\s*\n?یا بیشتر|سه‌تا یا بیشتر/.test(p), 'شمارش small_test باید بازنویسی شده باشد');
+  ok(!/بیش از نیمی از خانه‌ها hypothesis/.test(p),
+     'شمارش قدیمی روی هفت خانه دیگر ممکن نیست — سه خانه اصلاً حدس نمی‌شوند');
+});
+
+t('fact بدون نقل‌قولِ پیدا‌شدنی، fact نمی‌ماند', () => {
+  const text = 'ما برای همه‌ی سفارش‌ها فاکتور رسمی واردکننده را می‌فرستیم و کد رهگیری می‌دهیم.';
+  const card = { cells: {
+    message:         { value: 'پک را بر اساس بودجه‌ی شما می‌چینیم', origin: 'fact' },
+    reasonToBelieve: { value: 'فاکتور رسمی', origin: 'fact', source: 'فاکتور رسمی واردکننده را می‌فرستیم' },
+    audience:        { value: 'y', origin: 'fact', source: 'کوتاه' }
+  } };
+  const r = V.GATES.checkCellOrigins(card, text);
+
+  eq(card.cells.reasonToBelieve.origin, 'fact', 'نقل‌قولی که واقعاً در متن هست، fact می‌ماند');
+  eq(card.cells.message.origin, 'commitment', 'وعده‌ی بی‌نقل‌قول باید به قول برگردد');
+  eq(card.cells.message.needsConfirmation, true, 'و تأیید کاربر بخواهد');
+  eq(card.cells.message.downgradedFrom, 'fact', 'و رد پایش بماند');
+  ok(/نقل‌قول ندارد/.test(card.cells.message.downgradeReason), card.cells.message.downgradeReason);
+  ok(/کوتاه/.test(card.cells.audience.downgradeReason), 'نقل‌قول خیلی کوتاه شاهد نیست');
+  eq(card.cells.audience.origin, 'hypothesis', 'خانه‌ای که قول نمی‌پذیرد، به حدس برمی‌گردد');
+  eq(r.pass, false);
+  eq(r.changed.length, 2);
+});
+
+t('نقل‌قول با نیم‌فاصله و ی عربی هم پیدا می‌شود', () => {
+  // بدون یکسان‌سازی، نقل‌قولِ درست هم رد می‌شد و همه‌چیز قول می‌شد
+  const card = { cells: { message: {
+    value: 'x', origin: 'fact', source: 'ارسال هديه همراه بسته بندي و پيام اختصاصي' } } };
+  V.GATES.checkCellOrigins(card, 'خدمات ما: «ارسال هدیه — همراه بسته‌بندی و پیام اختصاصی» برای همه.');
+  eq(card.cells.message.origin, 'fact', 'ی/ك عربی و نیم‌فاصله نباید نقل‌قول درست را رد کنند');
+});
+
+t('برچسبِ ناممکنِ کارت‌های قدیمی هم اصلاح می‌شود', () => {
+  // کارت‌های قبل از این قاعده «اقدام: hypothesis» دارند
+  const card = { cells: { action: { value: 'x', origin: 'hypothesis' },
+                          goal:   { value: 'y', origin: 'fact' } } };
+  const r = V.GATES.checkCellOrigins(card, '');
+  eq(card.cells.action.origin, 'decision');
+  eq(card.cells.goal.origin, 'decision', 'fact هم روی خانه‌ی تصمیمی جایی ندارد');
+  eq(r.changed.length, 2);
+  eq(V.GATES.checkCellOrigins({ cells: {} }, '').pass, true, 'کارت خالی نباید بترکد');
+  eq(V.GATES.checkCellOrigins(null, null).pass, true, 'نبودِ کارت هم');
+});
+
+t('دروازه پیش از نمایش کارت شلیک می‌کند، در هر دو مسیر', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ses = await readFile(new URL('../lib/session.js', import.meta.url), 'utf8');
+  const pip = await readFile(new URL('../lib/pipeline.js', import.meta.url), 'utf8');
+  for (const [name, src] of [['session', ses], ['pipeline', pip]])
+    ok(/GATES\.checkCellOrigins\(/.test(src), `${name} باید دروازه را صدا بزند`);
+  // در مسیر CLI باید *قبل* از نشان‌دادن کارت باشد
+  ok(pip.indexOf('GATES.checkCellOrigins(') < pip.indexOf("io.show({ type: 'strategy'"),
+     'کاربر نباید یک لحظه هم «واقعیت» ببیند که واقعیت نیست');
+});
+
+t('رابط هر چهار برچسب را می‌شناسد و «قول» را برجسته می‌کند', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ui = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  const map = ui.match(/const ORIGIN = \{[\s\S]*?\};/);
+  ok(map, 'نگاشت برچسب‌ها پیدا نشد');
+  for (const k of ['fact', 'hypothesis', 'commitment', 'decision'])
+    ok(map[0].includes(k + ':'), `${k} باید در نگاشت باشد`);
+  ok(!/v\.origin==='fact'\?'واقعیت':'حدس'/.test(ui), 'نگاشت دوتایی قدیمی نباید مانده باشد');
+  ok(/needsConfirmation\?/.test(ui), 'قولِ تأییدنشده باید روی صفحه دیده شود');
+});
+
+t('سرورِ کهنه سکوت نمی‌کند', async () => {
+  // ریشه‌ی «قاعده اعمال نشد»: پروسه ۲۸ دقیقه قبل از آن قاعده بالا آمده بود و
+  // Node ماژول را دوباره نمی‌خواند؛ /api/version هم buildِ دیسک را می‌گفت.
+  const { readFile } = await import('node:fs/promises');
+  const srv = await readFile(new URL('../server.js', import.meta.url), 'utf8');
+  ok(/function staleBuild\(/.test(srv), 'باید مقایسه‌ای بین کدِ اجرا و کدِ دیسک باشد');
+  const fn = srv.match(/function staleBuild\(\)[\s\S]*?\n}/)[0];
+  ok(/BUILD === onDisk/.test(fn) && /buildId\(here\)/.test(fn),
+     'باید buildِ لحظه‌ی بالا آمدن را با buildِ همین حالا بسنجد');
+  ok(/stale: staleBuild\(\)/.test(srv), '/api/version باید بگویدش');
+  ok(/checks\.push\(check\('کدِ در حال اجرا'/.test(srv), 'و خودآزمایی هم');
+  const ui = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  ok(/if \(v\.stale\)/.test(ui), 'و کاربر باید ببیندش، نه اینکه در JSON بماند');
+});
+
+t('کارت نمونه با قاعده‌های تازه جور است', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const card = JSON.parse(await readFile(new URL('../fixtures/strategy_card.json', import.meta.url), 'utf8'));
+  for (const [k, v] of Object.entries(card.cells))
+    ok(CELLS[k].properties.origin.enum.includes(v.origin),
+       `${k} با برچسب «${v.origin}» در اسکیما مجاز نیست`);
+  // و دروازه نباید چیزی برای اصلاح پیدا کند
+  eq(V.GATES.checkCellOrigins(JSON.parse(JSON.stringify(card)), '').changed
+      .filter(c => c.from !== 'fact').length, 0, 'نمونه نباید برچسب ناممکن داشته باشد');
+});
+
 // ── رتبه‌بندی مشاهده‌ها: اطمینان × اهمیت ─────────────────────
 // امتیاز الگو به‌تنهایی، مشاهده‌ی قطعیِ بی‌اثر را بالای فهرست می‌نشاند.
 

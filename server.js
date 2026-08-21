@@ -379,13 +379,32 @@ app.post('/diag', guard(async (req, res) => {
 // شناسه‌ی نسخه یک بار موقع بالا آمدن خوانده می‌شود، نه هر درخواست: کدی که
 // این پروسه اجرا می‌کند تا restart بعدی عوض نمی‌شود، حتی اگر HEAD وسط کار
 // جلو برود. فایل BUILD حذف شد — چرایش در lib/selftest.js نوشته است.
-const BUILD = buildId(here);
+const BUILD = buildId(here);   // ← لحظه‌ی بالا آمدن، نه لحظه‌ی درخواست
+
+/**
+ * کدِ در حال اجرا با کدِ روی دیسک یکی است؟
+ *
+ * Node ماژول‌ها را یک بار در import می‌خواند و دیگر عوضشان نمی‌کند. سروری که
+ * قبل از یک تغییر بالا آمده، تا ری‌استارت همان پرامپت و همان اسکیمای قدیمی را
+ * اجرا می‌کند — و /api/version تا امروز buildِ *دیسک* را نشان می‌داد، پس صفحه
+ * می‌گفت کد تازه است درحالی‌که خروجی از کد قدیمی می‌آمد.
+ *
+ * این دقیقاً یک بار پیش آمد: قاعده‌ی تازه‌ی کارت استراتژی «اعمال نشد»، چون
+ * سرور ۲۸ دقیقه قبل از آن قاعده بالا آمده بود.
+ */
+function staleBuild() {
+  const onDisk = buildId(here);
+  if (!BUILD || !onDisk || BUILD === onDisk) return null;
+  return `کدِ در حال اجرا (${BUILD}) با کدِ روی دیسک (${onDisk}) یکی نیست — `
+       + 'سرور از وقتی بالا آمده همان کد قدیمی را اجرا می‌کند. دوباره بالا بیاورش.';
+}
 
 app.get('/api/version', guard(async (_req, res) => {
   const build = BUILD;
   let engine = null;
   try { engine = activeEngine(); } catch { /* VOHU_PROVIDER نامعتبر — selftest می‌گوید */ }
-  res.json({ build, startedAt: STARTED_AT, model: engine?.model || null, provider: engine?.provider || null });
+  res.json({ build, startedAt: STARTED_AT, stale: staleBuild(),
+             model: engine?.model || null, provider: engine?.provider || null });
 }));
 
 app.get('/api/selftest', guard(async (_req, res) => {
@@ -415,6 +434,10 @@ app.get('/api/selftest', guard(async (_req, res) => {
     detail: process.env.ANTHROPIC_API_KEY
       ? 'تعریف شده' + (needAnthropic ? '' : ' — ولی سرویس فعال openai است، خوانده نمی‌شود')
       : (needAnthropic ? 'تعریف نشده' : 'تعریف نشده — لازم هم نیست، سرویس فعال openai است') })));
+  checks.push(check('کدِ در حال اجرا', () => {
+    const stale = staleBuild();
+    return { ok: !stale, detail: stale || `${BUILD || '؟'} — همان چیزی که روی دیسک است` };
+  }));
   checks.push(check('VOHU_MODEL', () => ({
     ok: needAnthropic ? Boolean(process.env.VOHU_MODEL) : true,
     detail: process.env.VOHU_MODEL

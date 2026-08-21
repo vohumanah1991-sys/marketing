@@ -98,6 +98,9 @@ button.g{background:var(--card);color:var(--ink);border:1px solid var(--line);fo
     fetch('/api/version?from=page').then(function(r){ return r.json(); }).then(function(v){
       var el = document.getElementById('build');
       if (el) el.textContent = 'نسخه: ' + (v.build || '؟');
+      // سرورِ کهنه سکوت نمی‌کند: قاعده‌ی تازه‌ای که اضافه شده تا ری‌استارت
+      // اجرا نمی‌شود، و بدون این هشدار کسی نمی‌فهمد چرا «اعمال نشد».
+      if (v.stale) show('سرور باید دوباره بالا بیاید', v.stale);
     }).catch(function(e){ show('fetch کار نمی‌کند', e.message,
       'یعنی مرورگر می‌تواند صفحه را بگیرد ولی درخواست پس‌زمینه نمی‌فرستد.'); });
   } catch (e) { show('fetch اصلاً وجود ندارد', e.message); }
@@ -117,6 +120,10 @@ let lastRun = null;
 const esc = s => String(s??'').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
 const FA = {goal:'هدف',audience:'مخاطب',tension:'کشش',message:'پیام',
   reasonToBelieve:'دلیل باور',action:'اقدام',successSignal:'نشانه‌ی موفقیت'};
+// چهار برچسب، چهار رنگ. «قول» عمداً قرمز است: تنها برچسبی که کار کاربر
+// دارد — تا تأییدش نکند، شاهد حساب نمی‌شود.
+const ORIGIN = {fact:['واقعیت','t-f'], hypothesis:['حدس','t-h'],
+  commitment:['قول — تأیید می‌خواهد','t-w'], decision:['تصمیم','t-n']};
 const PUR = {attention:'جلب توجه',case:'ساختن دلیل',objection:'برداشتن مانع',ask:'درخواست اقدام'};
 
 let spinTimer = null;
@@ -711,8 +718,10 @@ function strategy(){
   <hr style="border:none;border-top:1px solid var(--line);margin:24px 0">
   <div class="day">برنامه ${c.mode==='small_test'?'· آزمایش کوچک':''}</div>
   ${Object.entries(c.cells||{}).map(([k,v])=>`<div class="card"><b>${FA[k]||k}
-    <span class="tag ${v.origin==='fact'?'t-f':'t-h'}">${v.origin==='fact'?'واقعیت':'حدس'}</span></b>
-    <div class="v">${esc(v.value)}</div></div>`).join('')}
+    <span class="tag ${ORIGIN[v.origin]?.[1]||'t-n'}">${ORIGIN[v.origin]?.[0]||esc(v.origin||'؟')}</span></b>
+    <div class="v">${esc(v.value)}</div>
+    ${v.needsConfirmation?`<div class="sm" style="margin-top:6px;color:var(--red)">این را از طرف تو گفته‌ام و در چیزی که خواندم نبود${v.downgradeReason?` (${esc(v.downgradeReason)})`:''} — اگر درست نیست، همین‌جا بگو.</div>`:''}
+    </div>`).join('')}
   ${measureBox(c.measurement)}
   ${c.reachCaveat?`<div class="gate">${esc(c.reachCaveat)}</div>`:''}
   <div class="card"><b>پیش‌بینی من</b><div class="v">${esc(c.prediction?.observable)}</div>
