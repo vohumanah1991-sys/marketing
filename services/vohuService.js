@@ -199,7 +199,17 @@ export async function callWithSchema({
   }
 
   // ── Anthropic ───────────────────────────────────────────────
-  if (!useModel) throw new Error('VOHU_MODEL در .env تعریف نشده');
+  // مسیر anthropic نام مدل را فقط از VOHU_MODEL می‌خواند — پیام باید همان اسم
+  // را بگوید و اگر مدل در متغیرِ آن‌یکی سرویس نشسته باشد، صریح بگوید کجاست.
+  if (!useModel) {
+    const err = new Error(
+      'VOHU_MODEL در .env تعریف نشده — با VOHU_PROVIDER=anthropic نام مدل فقط از VOHU_MODEL خوانده می‌شود');
+    err.hint = process.env.OPENAI_MODEL
+      ? `الان OPENAI_MODEL=«${process.env.OPENAI_MODEL}» در .env هست، ولی آن فقط مسیر openai را تغذیه می‌کند. `
+        + `یک خط  VOHU_MODEL=${process.env.OPENAI_MODEL}  به .env اضافه کن و سرور را دوباره بالا بیاور.`
+      : 'یک خط  VOHU_MODEL=claude-sonnet-5  به .env اضافه کن و سرور را دوباره بالا بیاور.';
+    throw err;
+  }
 
   const t0 = Date.now();
   const client = await getClient();

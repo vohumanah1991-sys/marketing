@@ -406,7 +406,11 @@ app.get('/api/selftest', guard(async (_req, res) => {
   checks.push(check('VOHU_MODEL', () => ({
     ok: needAnthropic ? Boolean(process.env.VOHU_MODEL) : true,
     detail: process.env.VOHU_MODEL
-      || (needAnthropic ? 'تعریف نشده' : 'تعریف نشده — با openai مدل از OPENAI_MODEL می‌آید') })));
+      || (needAnthropic
+            ? 'تعریف نشده' + (process.env.OPENAI_MODEL
+                ? ` — مدل «${process.env.OPENAI_MODEL}» در OPENAI_MODEL نشسته که مسیر anthropic نمی‌خواندش`
+                : '')
+            : 'تعریف نشده — با openai مدل از OPENAI_MODEL می‌آید') })));
   checks.push(check('APIFY_TOKEN', () => ({
     ok: apifyEnabled(), detail: apifyEnabled() ? 'تعریف شده' : 'تعریف نشده — اینستاگرام خاموش است' })));
 
