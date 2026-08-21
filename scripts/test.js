@@ -663,6 +663,34 @@ t('VOHU_PROVIDER=openai بدون کلید، صریح می‌ایستد', async (
   });
 });
 
+t('VOHU_MODEL که نیست ولی OPENAI_MODEL هست — پیام می‌گوید مدل کجا نشسته', async () => {
+  // مسیر anthropic نام مدل را فقط از VOHU_MODEL می‌خواند. کسی که OPENAI_MODEL را
+  // پر کرده، یک نام مدل جلوی چشمش در .env دارد و «تعریف نشده» را باور نمی‌کند.
+  const err = await withEnv(
+    { VOHU_PROVIDER: 'anthropic', VOHU_MODEL: null, OPENAI_MODEL: 'gpt-5-mini', VOHU_DRY_RUN: null },
+    async () => {
+      try {
+        await callWithSchema({ prompt: 'x', schema: { type: 'object', required: [], properties: {} }, toolName: 'x' });
+        return null;
+      } catch (e) { return e; }
+    });
+
+  ok(err, 'باید بایستد، نه اینکه بی‌مدل جلو برود');
+  ok(err.message.includes('VOHU_MODEL'), `باید نام متغیر درست را بگوید: ${err.message}`);
+  ok(err.hint && err.hint.includes('gpt-5-mini'), `باید بگوید مدل کجا نشسته: ${err.hint}`);
+  ok(err.hint.includes('VOHU_MODEL=gpt-5-mini'), `باید همان خطی را بدهد که باید به .env اضافه شود: ${err.hint}`);
+
+  // و بدون OPENAI_MODEL هم کاربر بی‌راهنما نمی‌ماند
+  const bare = await withEnv(
+    { VOHU_PROVIDER: 'anthropic', VOHU_MODEL: null, OPENAI_MODEL: null, VOHU_DRY_RUN: null },
+    async () => {
+      try { await callWithSchema({ prompt: 'x', schema: { type: 'object', required: [], properties: {} }, toolName: 'x' }); return null; }
+      catch (e) { return e; }
+    });
+  ok(bare?.hint?.includes('VOHU_MODEL='), `راه ادامه باید همیشه باشد: ${bare?.hint}`);
+  ok(!bare.hint.includes('undefined'), `نبودِ OPENAI_MODEL نباید در پیام نشت کند: ${bare.hint}`);
+});
+
 t('هر خروجی مهر سازنده‌اش را می‌گیرد (producedBy)', async () => {
   await withEnv({ VOHU_DRY_RUN: '1', VOHU_FIXTURES: './fixtures' }, async () => {
     const { data, meta } = await callWithSchema({
