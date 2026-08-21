@@ -992,6 +992,87 @@ const STORED = {
   }
 };
 
+// ── «جواب داد» باید شمردنی باشد ──────────────────────────────
+// نشانه‌ی موفقیت بدون عدد و خط پایه، دو هفته بعد قابل راستی‌آزمایی نیست؛
+// و اقدامی که ابزارهای ما نمی‌بینندش، بی‌اعلام نباید پیشنهاد شود.
+
+const CARD_PROMPT = V.STRATEGY_CARD_PROMPT({
+  knowledge: {}, insight: 'x', answers: {}, constraints: [], fatigue: {} });
+
+t('پرامپت کارت، نشانه‌ی موفقیت بی‌عدد را نمی‌پذیرد', () => {
+  ok(/خط پایه/.test(CARD_PROMPT), 'خط پایه باید خواسته شود');
+  ok(/عدد هدف/.test(CARD_PROMPT), 'عدد هدف باید خواسته شود');
+  ok(/countFirst/.test(CARD_PROMPT) && /قبل از شروع/.test(CARD_PROMPT),
+     'وقتی خط پایه نامعلوم است، باید به‌جای نشانه‌ی مبهم بگوید «قبل از شروع، X را بشمار»');
+  ok(/اقدام لازم/.test(CARD_PROMPT), 'و همان شمردن باید یک اقدام لازم باشد، نه یک تذکر');
+  ok(/حدس نزن/.test(CARD_PROMPT) && /baseline[\s\S]{0,40}null/.test(CARD_PROMPT),
+     'خط پایه‌ی نامعلوم باید null بماند، نه عددِ ساختگی — قاعده‌ی ۶');
+});
+
+t('پرامپت کارت می‌گوید با چه چیزی می‌شود اندازه گرفت و با چه چیزی نه', () => {
+  // فهرست از روی چیزی است که واقعاً جمع می‌کنیم (lib/instagram.js)
+  for (const w of ['کامنت', 'لایک', 'بازدید'])
+    ok(new RegExp(w).test(CARD_PROMPT), `«${w}» باید در فهرست شمردنی‌ها باشد`);
+  for (const w of ['دایرکت', 'سیو', 'ریچ', 'فروش'])
+    ok(new RegExp(w).test(CARD_PROMPT), `«${w}» باید در فهرست شمردنی‌نیست‌ها باشد`);
+  ok(/blindSpot/.test(CARD_PROMPT) && /قابل رصد نیست|دیده نمی‌شود/.test(CARD_PROMPT),
+     'اقدام نامرئی باید صریح اعلام شود، نه اینکه ممنوع باشد');
+
+  // پرامپت نباید خودش را نقض کند: مثالِ «درست» در بخش پیش‌بینی قبلاً
+  // دایرکت بود — همان چیزی که حالا شمردنی حساب نمی‌شود.
+  const good = CARD_PROMPT.match(/^درست: .*$/m);
+  ok(good, 'مثال «درست» پیدا نشد');
+  ok(!/دایرکت/.test(good[0]), `مثال «درست» نباید چیزی باشد که نمی‌توانیم بشماریم: ${good[0]}`);
+});
+
+t('اسکیمای کارت جایی برای این دو قاعده دارد — نه فقط پرامپت', () => {
+  const S = V.STRATEGY_CARD_SCHEMA;
+  ok(S.required.includes('measurement'), 'نبودش باید همان اول گیر بیفتد، نه اینکه امید به پرامپت باشد');
+  const m = S.properties.measurement;
+  ok(m.required.includes('countable'), 'شمردنی‌بودن باید همیشه جواب داشته باشد');
+  for (const f of ['metric', 'baseline', 'countFirst', 'blindSpot'])
+    ok(m.properties[f], `${f} باید در اسکیما باشد`);
+  // خط پایه‌ی نامعلوم باید بتواند null بماند، وگرنه مدل مجبور به ساختن عدد می‌شود
+  ok(m.properties.baseline.type.includes('null'), 'baseline باید بتواند null باشد');
+});
+
+t('کارت می‌گوید با چه چیزی رصد می‌شود — روی صفحه، نه فقط در JSON', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ui = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  const grab = n => (ui.match(new RegExp('function ' + n + '\\([\\s\\S]*?\\n}')) || [])[0];
+  ok(grab('measureBox'), 'measureBox پیدا نشد');
+  ok(/\$\{measureBox\(c\.measurement\)\}/.test(ui), 'کارت استراتژی باید صدایش بزند');
+
+  const draw = new Function('m', `
+    const esc = s => String(s??'').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+    ${grab('measureBox')}
+    return measureBox(m);`);
+
+  eq(draw(null), '', 'کارت قدیمی بدون measurement نباید بترکد');
+  eq(draw({ countable: true, metric: 'کامنت', baseline: '۴' }), '',
+     'وقتی خط پایه هست و شمردنی است، چیز اضافه‌ای نشان داده نمی‌شود');
+
+  const first = draw({ countable: true, countFirst: 'قبل از شروع، کامنت‌های هر پست را بشمار', baseline: null });
+  ok(first.includes('قبل از شروع'), `شمردنِ خط پایه باید دیده شود: ${first}`);
+
+  const blind = draw({ countable: false, blindSpot: 'دایرکت را نمی‌توانیم بشماریم' });
+  ok(/class="gate"/.test(blind) && blind.includes('دایرکت'), `اقدام نامرئی باید دیده شود: ${blind}`);
+  // حتی اگر مدل blindSpot را خالی بگذارد، کاربر نباید بی‌خبر بماند
+  ok(/class="gate"/.test(draw({ countable: false })), 'countable=false بدون توضیح هم باید هشدار بدهد');
+});
+
+t('کارتِ نمونه‌ی حالت خشک با همین قاعده‌ها جور است', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const card = JSON.parse(await readFile(new URL('../fixtures/strategy_card.json', import.meta.url), 'utf8'));
+  const m = card.measurement;
+  ok(m, 'نمونه باید measurement داشته باشد، وگرنه حالت خشک مسیر تازه را اصلاً نمی‌آزماید');
+  eq(typeof m.countable, 'boolean');
+  // اقدام این کارت در دایرکت است — پس باید اعلام‌شده باشد، نه بی‌صدا
+  eq(m.countable, false, 'اقدام دایرکتی شمردنی نیست');
+  ok(m.blindSpot && m.blindSpot.length > 10, 'و باید بگوید چرا');
+  ok(m.baseline === null && m.countFirst, 'خط پایه‌ی نامعلوم یعنی قدم اول شمردن است');
+});
+
 t('اجرای تازه بنر «قدیمی است» نمی‌گیرد', () => {
   eq(restoredInfo(STORED, null), null, 'وقتی همین حالا ساخته شده، بنری در کار نیست');
   eq(restoredInfo(null, '2026-08-18T10:00:00Z'), null, 'بدون اجرا هم چیزی ادعا نمی‌شود');
