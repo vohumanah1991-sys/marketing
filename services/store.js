@@ -16,7 +16,7 @@
  * از مرحله‌ای که تمام شده ادامه می‌دهد، نه از اول.
  */
 
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { currentUser } from '../lib/userContext.js';
@@ -73,11 +73,70 @@ export function slug(url) {
   return String(url).replace(/^https?:\/\//, '').replace(/[^a-z0-9]+/gi, '-').slice(0, 60);
 }
 
+/* ══════════════════════════════════════════════════════════
+   درزِ انبار — تنها جایی که مغز با «کجا ذخیره شود» کار دارد
+   ══════════════════════════════════════════════════════════
+
+   بقیه‌ی مغز نباید بداند پشت این چهار تابع فایل است یا دیتابیس. تا امروز
+   می‌دانست: jobs.js و igSync.js خودشان existsSync و readdir صدا می‌زدند.
+   نتیجه‌اش این بود که بردن مغز روی هر انبار دیگری یعنی دست‌زدن به آن فایل‌ها
+   هم — و آن دیگر «انتقال» نیست، «انشعاب» است.
+
+   حالا فقط همین فایل جای ذخیره را می‌شناسد. نسخه‌ی SQLite همین چهار تا را
+   جور دیگری پیاده می‌کند و هیچ فایل دیگری از مغز عوض نمی‌شود.
+
+   `kind` یعنی نوع سند: run / memory / job / ig. `id` شناسه‌ی داخل آن نوع.
+*/
+
+const KINDS = {
+  run:    id => `${id}.json`,
+  memory: id => `memory-${id}.json`,
+  ig:     id => `ig-${id}.json`,
+  job:    id => path.join('jobs', `${id}.json`)
+};
+
+const docPath = (kind, id) => {
+  const shape = KINDS[kind];
+  if (!shape) throw new Error(`نوع سند ناشناخته: ${kind}`);
+  return path.join(userDir(), shape(String(id)));
+};
+
+/** سند، یا null اگر نیست. سندِ خراب هم null است — نه یک استثنا وسط اجرا. */
+export async function readDoc(kind, id) {
+  const f = docPath(kind, id);
+  if (!existsSync(f)) return null;
+  try { return JSON.parse(await readFile(f, 'utf8')); }
+  catch { return null; }
+}
+
+export async function writeDoc(kind, id, data) {
+  const f = docPath(kind, id);
+  await ensureDir(path.dirname(f));
+  await writeJsonAtomic(f, data);
+  return data;
+}
+
+export async function docExists(kind, id) {
+  return existsSync(docPath(kind, id));
+}
+
+/** همه‌ی سندهای یک نوع. سندهای خراب رد می‌شوند، نه اینکه فهرست را بترکانند. */
+export async function listDocs(kind) {
+  const dir = path.dirname(docPath(kind, 'x'));
+  if (!existsSync(dir)) return [];
+  const prefix = KINDS[kind]('').replace(/\.json$/, '').replace(/^jobs\//, '');
+  const files = (await readdir(dir))
+    .filter(f => f.endsWith('.json') && f.startsWith(prefix));
+  const out = [];
+  for (const f of files) {
+    try { out.push(JSON.parse(await readFile(path.join(dir, f), 'utf8'))); } catch {}
+  }
+  return out;
+}
+
 export async function loadRun(url) {
-  const file = path.join(userDir(), `${slug(url)}.json`);
-  const run = existsSync(file)
-    ? JSON.parse(await readFile(file, 'utf8'))
-    : { url, stages: {}, createdAt: new Date().toISOString() };
+  const stored = await readDoc('run', slug(url));
+  const run = stored || { url, stages: {}, createdAt: new Date().toISOString() };
 
   // شکل حداقلی همیشه تضمین شود.
   // بدون این، اجرای تازه input نداشت و اولین نوشتن روی run.input منفجر می‌شد —
@@ -89,8 +148,7 @@ export async function loadRun(url) {
 }
 
 export async function saveRun(run) {
-  const DIR = await ensureDir(userDir());
   run.updatedAt = new Date().toISOString();
-  await writeJsonAtomic(path.join(DIR, `${slug(run.url)}.json`), run);
+  await writeDoc('run', slug(run.url), run);
   return run;
 }

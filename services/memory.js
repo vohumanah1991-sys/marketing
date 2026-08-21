@@ -16,12 +16,11 @@
  * یک حافظه دارد حتی اگر ده بار از نو شروع شده باشد.
  */
 
-import { readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import path from 'node:path';
-import { userDir, ensureDir, writeJsonAtomic, slug } from './store.js';
+import { readDoc, writeDoc, docExists, slug } from './store.js';
 
-export const memoryFile = (url) => path.join(userDir(), `memory-${slug(url)}.json`);
+/** شناسه‌ی حافظه = همان slug اجرا، پس یک کسب‌وکار یک حافظه دارد. */
+export const memoryId = (url) => slug(url);
+export const memoryExists = (url) => docExists('memory', memoryId(url));
 
 /** شکل حداقلی — هر خواننده‌ای می‌تواند بدون چک روی آرایه‌ها حلقه بزند. */
 const EMPTY = () => ({
@@ -34,22 +33,15 @@ const EMPTY = () => ({
 });
 
 export async function loadMemory(url) {
-  const file = memoryFile(url);
-  if (!existsSync(file)) return EMPTY();
-  try {
-    return { ...EMPTY(), ...JSON.parse(await readFile(file, 'utf8')) };
-  } catch {
-    // حافظه‌ی خراب نباید اجرا را بخواباند. از دست‌دادن درس‌ها بد است،
-    // ولی گیرکردن کاربر پشت یک فایل نیم‌نوشته بدتر است.
-    console.warn(`[حافظه] ${file} خوانده نشد — با حافظه‌ی خالی ادامه می‌دهم`);
-    return EMPTY();
-  }
+  // حافظه‌ی خراب null برمی‌گردد، نه استثنا. از دست‌دادن درس‌ها بد است، ولی
+  // گیرکردن کاربر پشت یک سند نیم‌نوشته بدتر است.
+  const stored = await readDoc('memory', memoryId(url));
+  return { ...EMPTY(), ...(stored || {}) };
 }
 
 export async function saveMemory(url, mem) {
-  await ensureDir(userDir());
   const out = { ...EMPTY(), ...mem, url, updatedAt: new Date().toISOString() };
-  await writeJsonAtomic(memoryFile(url), out);
+  await writeDoc('memory', memoryId(url), out);
   return out;
 }
 
