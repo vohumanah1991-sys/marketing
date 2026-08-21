@@ -24,6 +24,7 @@ import { analyzeItems } from './lib/igAnalyze.js';
 import { capabilities } from './services/media.js';
 import { apifyEnabled } from './services/apify.js';
 import { configuredProvider, activeEngine } from './services/vohuService.js';
+import { GATES } from './prompts/vohuPrompts.js';
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -225,9 +226,48 @@ app.post('/api/run/page-text', guard(async (req, res) => {
 app.post('/api/run/approve', guard(async (req, res) => {
   const run = await getRun(req.body.url);
   run.input = run.input || {};
+
+  // اینجا هم چک می‌شود، نه فقط در advance: کاربر باید *بفهمد* چرا تأییدش
+  // نگرفت. بدون این، دکمه را می‌زد و همان صفحه برمی‌گشت بدون هیچ توضیحی.
+  const conf = GATES.canApproveCard(run.stages?.strategy);
+  if (!conf.pass)
+    return res.status(400).json({
+      error: `${conf.reason} — اول همان‌ها را جواب بده`,
+      hint: 'زیر هر کدام دو دکمه هست: «درست است» یا «نه». تا همه‌شان جواب نگیرند، تأیید معنی ندارد.',
+      pending: conf.pending
+    });
+
   run.input.approved = true;
   await saveRun(run);
   res.json(view(await advance(run)));
+}));
+
+/**
+ * تأیید یا تصحیح یک قول.
+ *
+ * «درست است» → فقط needsConfirmation برداشته می‌شود. برچسب **commitment
+ * می‌ماند**، چون هنوز همان قول است — فقط حالا کاربر پشتش ایستاده. تبدیلش به
+ * fact یعنی وانمود کنیم در منابع دیده‌ایمش، که ندیده‌ایم.
+ * «نه، این است» → مقدار عوض می‌شود؛ باز هم قول است، این بار به بیان خودش.
+ */
+app.post('/api/run/confirm', guard(async (req, res) => {
+  const run = await getRun(req.body.url);
+  const card = run.stages?.strategy;
+  if (!card?.cells) return res.status(400).json({ error: 'این اجرا کارتی ندارد' });
+
+  for (const [name, answer] of Object.entries(req.body.cells || {})) {
+    const c = card.cells[name];
+    if (!c || c.needsConfirmation !== true) continue;
+    const correction = typeof answer === 'string' ? answer.trim() : '';
+    if (correction) { c.correctedFrom = c.value; c.value = correction; }
+    else if (answer !== true) continue;              // نه true بود نه متن — یعنی هنوز جواب نداده
+    c.needsConfirmation = false;
+    c.confirmedAt = new Date().toISOString();
+  }
+  card.pendingConfirmations = GATES.canApproveCard(card).pending;
+  await saveRun(run);
+  res.json(view({ run, needs: 'approval', state: 'awaiting_approval',
+                  stages: Object.keys(run.stages || {}) }));
 }));
 
 // ── نیمه‌ی دوم حلقه: «چه شد؟» ───────────────────────────────

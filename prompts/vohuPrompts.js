@@ -2356,10 +2356,41 @@ export const GATES = {
     return { pass: changed.length === 0, changed };
   },
 
+  /**
+   * دروازه‌ی تأیید — قولِ تأییدنشده، تأیید نمی‌شود.
+   *
+   * `checkCellOrigins` خانه‌ای را که ادعای بی‌شاهد داشت به commitment برگرداند
+   * و `needsConfirmation` زد. ولی هیچ‌چیز جلوی تأیید کارت را نمی‌گرفت: کاربر
+   * «تأیید می‌کنم» را می‌زد و کمپین روی وعده‌ای ساخته می‌شد که خودِ ما از طرف
+   * او گفته بودیم و او هرگز تأییدش نکرده بود.
+   *
+   * این سد است، نه هشدار. تأیید یک بله‌ی سراسری نیست — هر قولی جدا بله می‌خواهد.
+   */
+  canApproveCard(card) {
+    const pending = Object.entries(card?.cells || {})
+      .filter(([, c]) => c && typeof c === 'object' && c.needsConfirmation === true)
+      .map(([cell, c]) => ({
+        cell,
+        value: c.value,
+        why: c.downgradeReason || 'این را از طرف کسب‌وکار گفته‌ایم و شاهدی برایش نداریم'
+      }));
+    return {
+      pass: pending.length === 0,
+      pending,
+      reason: pending.length
+        ? `${pending.length} چیز هست که از طرف تو گفته‌ایم و هنوز تأیید نکرده‌ای`
+        : null
+    };
+  },
+
   // دروازه ۲ — آیا اجازه‌ی تولید محتوا داریم؟
   canProduceContent(card) {
     if (!card?.approvedAt) return { pass: false, reason: 'کارت استراتژی تأیید نشده' };
     if (!card?.prediction?.observable) return { pass: false, reason: 'پیش‌بینی ثبت نشده' };
+    // ⚠ دو ایست جدا لازم است: کارتی که قبل از این قاعده تأیید شده ممکن است
+    // approvedAt داشته باشد و هنوز قول تأییدنشده هم داشته باشد.
+    const conf = GATES.canApproveCard(card);
+    if (!conf.pass) return { pass: false, reason: conf.reason, pending: conf.pending };
     return { pass: true };
   },
 

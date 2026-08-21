@@ -992,6 +992,73 @@ const STORED = {
   }
 };
 
+// ── قولِ تأییدنشده، تأیید نمی‌شود ─────────────────────────────
+// checkCellOrigins برچسب را درست می‌کرد ولی هیچ‌چیز جلوی تأیید را نمی‌گرفت:
+// کاربر «تأیید می‌کنم» را می‌زد و کمپین روی وعده‌ای ساخته می‌شد که خودِ ما از
+// طرف او گفته بودیم.
+
+const cardWith = (cells) => ({ approvedAt: 'x', prediction: { observable: 'y' }, cells });
+
+t('قولِ تأییدنشده سدِ تأیید کارت است', () => {
+  const card = cardWith({
+    message: { value: 'پک را می‌چینیم', origin: 'commitment',
+               needsConfirmation: true, downgradeReason: 'نقل‌قول ندارد' },
+    goal:    { value: 'z', origin: 'decision' }
+  });
+  const g = V.GATES.canApproveCard(card);
+  eq(g.pass, false, 'باید سد کند');
+  eq(g.pending.length, 1);
+  eq(g.pending[0].cell, 'message', 'باید بگوید کدام خانه');
+  ok(g.pending[0].why.includes('نقل‌قول'), 'و چرا: همان دلیلِ برگشت‌خوردن برچسب');
+  ok(/[؀-ۿ]/.test(g.reason) && /\d|۱/.test(g.reason), `دلیل فارسی با تعداد: ${g.reason}`);
+});
+
+t('تولید محتوا هم پشت همین سد است، نه فقط تأیید', () => {
+  // کارتی که قبل از این قاعده تأیید شده، approvedAt دارد ولی قول تأییدنشده هم
+  const stale = cardWith({ message: { value: 'v', origin: 'commitment', needsConfirmation: true } });
+  const r = V.GATES.canProduceContent(stale);
+  eq(r.pass, false, 'approvedAt به‌تنهایی کافی نیست');
+  eq(r.pending?.length, 1, 'و باید بگوید چه چیزی مانده');
+
+  const clean = cardWith({ message: { value: 'v', origin: 'commitment', needsConfirmation: false } });
+  eq(V.GATES.canProduceContent(clean).pass, true, 'بعد از تأیید، راه باز است');
+  eq(V.GATES.canApproveCard(cardWith({})).pass, true, 'کارت بدون قول، چیزی برای پرسیدن ندارد');
+  eq(V.GATES.canApproveCard(null).pass, true, 'نبودِ کارت نباید بترکد');
+});
+
+t('سد در هر دو در است — هم advance هم سرِ تأیید', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ses = await readFile(new URL('../lib/session.js', import.meta.url), 'utf8');
+  const srv = await readFile(new URL('../server.js', import.meta.url), 'utf8');
+
+  ok(/GATES\.canApproveCard\(/.test(ses), 'advance باید قبل از approvedAt چک کند');
+  ok(/run\.input\.approved = false/.test(ses),
+     'تأییدِ کهنه باید پاک شود، وگرنه بعداً بی‌صدا رد می‌شود');
+  ok(/GATES\.canApproveCard\(/.test(srv), 'سرِ تأیید هم باید چک کند');
+  // ⚠ بدون این، دکمه زده می‌شد و همان صفحه بدون توضیح برمی‌گشت
+  ok(/status\(400\)[\s\S]{0,300}pending/.test(srv), 'و باید با پیام روشن رد کند، نه سکوت');
+  ok(/app\.post\('\/api\/run\/confirm'/.test(srv), 'راه جواب‌دادن هم باید باشد');
+});
+
+t('تأیید کاربر، قول را به واقعیت تبدیل نمی‌کند', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const srv = await readFile(new URL('../server.js', import.meta.url), 'utf8');
+  const block = srv.match(/app\.post\('\/api\/run\/confirm'[\s\S]*?\n\}\)\);/)[0];
+  ok(!/origin\s*=\s*'fact'/.test(block),
+     'تبدیل به fact یعنی وانمود کنیم در منابع دیدیمش — ندیدیم');
+  ok(/needsConfirmation = false/.test(block), 'فقط انتظارِ تأیید برداشته می‌شود');
+  ok(/correctedFrom/.test(block), 'و اگر کاربر تصحیح کرد، اصلِ حرف ما باید بماند');
+});
+
+t('رابط تا جواب‌نگرفتن، دکمه‌ی تأیید را باز نمی‌گذارد', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ui = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  ok(/pendingConfirmations\|\|\[\]\)\.length\?' disabled'/.test(ui),
+     'دکمه‌ی تأیید باید تا وقتی چیزی مانده غیرفعال باشد');
+  ok(/function confirmCell\(/.test(ui), 'راه جواب‌دادن باید در رابط باشد');
+  ok(/درست است/.test(ui) && /نه، اینطور است/.test(ui), 'هر دو جواب باید ممکن باشند');
+});
+
 // ── برچسب هر خانه: چهار تا، و هرکدام جای خودش ────────────────
 // از یک اجرای واقعی (farideh.gilaseh): «پیام» با برچسب fact آمد ولی متنش
 // وعده‌ای بود که در هیچ محتوایی نیامده بود، و «اقدام» با برچسب hypothesis —
