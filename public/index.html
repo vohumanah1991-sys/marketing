@@ -777,7 +777,13 @@ function strategy(){
   ${Object.entries(c.cells||{}).map(([k,v])=>`<div class="card"><b>${FA[k]||k}
     <span class="tag ${ORIGIN[v.origin]?.[1]||'t-n'}">${ORIGIN[v.origin]?.[0]||esc(v.origin||'؟')}</span></b>
     <div class="v">${esc(v.value)}</div>
-    ${v.needsConfirmation?`<div class="sm" style="margin-top:6px;color:var(--red)">این را از طرف تو گفته‌ام و در چیزی که خواندم نبود${v.downgradeReason?` (${esc(v.downgradeReason)})`:''} — اگر درست نیست، همین‌جا بگو.</div>`:''}
+    ${v.needsConfirmation?`<div class="sm" style="margin-top:6px;color:var(--red)">این را از طرف تو گفته‌ام و در چیزی که خواندم نبود${v.downgradeReason?` (${esc(v.downgradeReason)})`:''}. تا جوابش ندهی نمی‌توانم جلو بروم.</div>
+      <div class="row" style="margin-top:8px">
+        <span class="chip" onclick="confirmCell('${esc(k)}', true)">درست است</span>
+        <span class="chip" onclick="tog('fix_${esc(k)}')">نه، اینطور است</span></div>
+      <div class="fold" id="fix_${esc(k)}"><input id="fixv_${esc(k)}" placeholder="پس درستش چیست؟">
+        <button class="g hbtn" style="margin-top:6px" onclick="confirmCell('${esc(k)}')">ثبت کن</button></div>`
+     :(v.confirmedAt?`<div class="sm" style="margin-top:6px;color:var(--ok)">✓ خودت تأییدش کردی</div>`:'')}
     </div>`).join('')}
   ${measureBox(c.measurement)}
   ${c.reachCaveat?`<div class="gate">${esc(c.reachCaveat)}</div>`:''}
@@ -788,10 +794,24 @@ function strategy(){
     <div class="sm">${esc(c.riskiestAssumption)}</div></div></div>
   <div class="gate" style="margin-top:16px"><b>تا اینجا هیچ محتوایی ساخته نشده.</b>
     تا این برنامه را تأیید نکنی، یک خط هم نمی‌نویسم.</div>
+  ${(c.pendingConfirmations||[]).length?`<div class="gate"><b>${(c.pendingConfirmations||[]).length} چیز مانده که باید جوابش بدهی.</b>
+    اینها را من از طرف تو گفته‌ام و شاهدی برایشان ندارم. تا جوابشان ندهی، تأیید معنی ندارد.</div>`:''}
   ${c.producedBy?`<p class="sm" style="opacity:.6">این کارت را ${esc(c.producedBy.provider)}/${esc(c.producedBy.model||'')} ساخته</p>`:''}
-  <button onclick="approve()">تأیید می‌کنم</button>`;
+  <button onclick="approve()"${(c.pendingConfirmations||[]).length?' disabled':''}>تأیید می‌کنم</button>`;
 }
 function approve(){ spin('کمپین را طراحی می‌کنم…', true); api('/api/run/approve',{url}); }
+
+/**
+ * جواب دادن به یک قولِ تأییدنشده.
+ * بدون متن یعنی «درست است». با متن یعنی تصحیح — و همان متن می‌نشیند.
+ */
+function confirmCell(name, asIs){
+  if (busy) return;
+  const el = $('#fixv_'+name);
+  const fix = asIs === true ? true : String(el && el.value || '').trim();
+  if (fix !== true && !fix){ alert('یا «درست است» را بزن یا درستش را بنویس.'); return; }
+  api('/api/run/confirm', { url, cells: { [name]: fix } });
+}
 
 function usageBar(){
   const u = S.usage; if(!u) return '';

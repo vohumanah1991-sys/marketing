@@ -49,15 +49,27 @@ async function fullRound(note) {
     assumptionResponses: {}, constraints: []
   };
   await advance(run);                                    // کارت → می‌ایستد روی تأیید
+
+  // قولِ تأییدنشده سد است: بدون جواب‌دادن به آن، تأیید جلو نمی‌رود.
+  // همان کاری که رابط با دکمه‌های «درست است / نه» می‌کند.
+  const pending = run.stages.strategy.pendingConfirmations || [];
+  for (const p of pending) {
+    const c = run.stages.strategy.cells[p.cell];
+    c.needsConfirmation = false;
+    c.confirmedAt = new Date().toISOString();
+  }
+  run.stages.strategy.pendingConfirmations = [];
+
   run.input.approved = true;
   await advance(run);                                    // تأیید + کمپین
-  return { run, asked };
+  return { run, asked, pending };
 }
 
 console.log('\n── دور اول ──');
 const r1 = await runAsUser('tester-1', () => fullRound('دور اول'));
 eq(currentUser(), 'default', 'بیرون از context، کاربر پیش‌فرض است');
 ok(r1.asked.length > 0, `دور اول ${r1.asked.length} سؤال پرسید`);
+ok(r1.pending.length > 0, `قولِ تأییدنشده جلوی تأیید را گرفت: ${r1.pending.map(p => p.cell).join('، ')}`);
 ok(Boolean(r1.run.stages.strategy?.approvedAt), 'کارت تأیید شد');
 ok(Boolean(r1.run.stages.campaign), 'کمپین ساخته شد');
 
