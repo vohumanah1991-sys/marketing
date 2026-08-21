@@ -660,6 +660,26 @@ function sendAns(){
   api('/api/run/answers',{url,answers,assumptions,constraints});
 }
 
+/**
+ * «با چه چیزی می‌فهمیم جواب داد؟»
+ *
+ * دو چیزی که کارت باید بگوید و بدون نمایششان همان حرف نگفته می‌ماند:
+ *   · خط پایه نامعلوم است → قدم اول شمردن است، نه ساختن محتوا.
+ *   · اقدام با ابزارهای ما دیده نمی‌شود → همان‌جا صریح گفته شود.
+ * هر دو از خود کارت می‌آیند؛ مرورگر چیزی حدس نمی‌زند.
+ */
+function measureBox(m){
+  if (!m) return '';
+  let h = '';
+  if (m.countFirst)
+    h += `<div class="card" style="border-color:#ecdcae;background:var(--ambs)"><b>قبل از شروع</b>
+      <div class="v">${esc(m.countFirst)}</div>
+      <div class="sm" style="margin-top:6px">بدون این عدد، دو هفته بعد نمی‌شود گفت جواب داد یا نه.</div></div>`;
+  if (m.countable === false)
+    h += `<div class="gate">${esc(m.blindSpot || 'نتیجه‌ی این اقدام با ابزارهای ما دیده نمی‌شود — باید خودت بشماری.')}</div>`;
+  return h;
+}
+
 function strategy(){
   const c = S.strategy;
   M.innerHTML = `<div class="day">سه راه — و نظر من</div>
@@ -674,6 +694,7 @@ function strategy(){
   ${Object.entries(c.cells||{}).map(([k,v])=>`<div class="card"><b>${FA[k]||k}
     <span class="tag ${v.origin==='fact'?'t-f':'t-h'}">${v.origin==='fact'?'واقعیت':'حدس'}</span></b>
     <div class="v">${esc(v.value)}</div></div>`).join('')}
+  ${measureBox(c.measurement)}
   ${c.reachCaveat?`<div class="gate">${esc(c.reachCaveat)}</div>`:''}
   <div class="card"><b>پیش‌بینی من</b><div class="v">${esc(c.prediction?.observable)}</div>
     <div class="sm" style="margin-top:6px">${c.prediction?.checkAfterDays??14} روز بعد همین را می‌پرسم.</div></div>
