@@ -120,7 +120,10 @@ const view = r => ({
   // null یعنی تازه است و بنری لازم نیست.
   restored:  restoredInfo(r.run, r.restoredAt || null),
   // سررسید «چه شد؟» — رابط بر اساس همین صفحه را نشان می‌دهد
-  followUp:  r.run.followUp ? followUpStatus(r.run) : null
+  followUp:  r.run.followUp ? followUpStatus(r.run) : null,
+  // مرحله‌ای که خروجی بدشکل داد. null یعنی چیزی رد نشده.
+  // این ۵۰۰ نیست: مرحله‌های قبلی ذخیره‌اند و فقط همین یکی باید دوباره بخورد.
+  stageFailed: r.run.stageFailed || null
 });
 
 // شروع یا ادامه
@@ -197,6 +200,25 @@ app.post('/api/run/competitors', guard(async (req, res) => {
   const run = await getRun(req.body.url);
   run.input = run.input || {};
   run.input.competitors = (req.body.competitors || []).filter(Boolean);
+  await saveRun(run);
+  res.json(view(await advance(run)));
+}));
+
+/**
+ * تلاش دوباره‌ی همان مرحله‌ای که خروجی بدشکل داد.
+ *
+ * چیزی را از نو نمی‌سازد: advance مرحله‌های ذخیره‌شده را رد می‌کند
+ * (`if (!done(x))`) و دقیقاً از همان‌جایی ادامه می‌دهد که ایستاده بود.
+ * پس این دکمه فقط همان یک مرحله را دوباره می‌زند، نه کل زنجیره را —
+ * و مرحله‌های پول‌داده‌ی قبلی دوباره پول نمی‌گیرند.
+ */
+app.post('/api/run/retry', guard(async (req, res) => {
+  const run = await getRun(req.body.url);
+  if (!run.stageFailed)
+    return res.status(400).json({ error: 'این اجرا مرحله‌ی ردشده‌ای ندارد' });
+  // نشانِ شکست برداشته می‌شود ولی شمارنده‌ها نه — آن‌ها باید بمانند تا
+  // معلوم شود این مرحله چندمین بار است که رد می‌شود.
+  delete run.stageFailed;
   await saveRun(run);
   res.json(view(await advance(run)));
 }));

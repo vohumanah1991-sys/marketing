@@ -153,6 +153,97 @@ if (FILE_STORE) {
   console.log(`  ⓘ آزمون دو کاربره اینجا نه — انبار «${storeKind()}» جداسازی‌اش با تنانت است`);
 }
 
+// ── ردِ اسکیما اجرا را نمی‌کشد ──────────────────────────────
+//
+// قبلاً خروجی بدشکلِ مدل تا صداکننده بالا می‌رفت و ۵۰۰ می‌شد. از دید تستر
+// «خطای سرور» روی کاری که هیچ ایرادی نداشت، و تنها راهش شروع از نو —
+// یعنی دور ریختن مرحله‌هایی که پولشان داده شده بود.
+//
+// یک بار این اتفاق روی سرور واقعی افتاد (مرحله‌ی «سؤال‌ها»، دو بار پشت هم)
+// و همان شد دلیل نوشتن این تست.
+await runAsUser('tester-schema', async () => {
+  const U = 'https://www.instagram.com/schema-reject-test';
+  const run = await startRun({ url: U, note: 'آزمون ردِ اسکیما' });
+  await advance(run);
+  run.input.competitors = [];
+
+  // از اینجا مرحله‌ی «سؤال‌ها» عمداً بدشکل جواب می‌دهد
+  process.env.VOHU_DRY_FAIL = 'questions';
+
+  const r1 = await advance(run);
+
+  eq(r1.state, 'stage_failed', 'ردِ اسکیما یک حالت است، نه استثنا');
+  eq(r1.needs, 'retryStage', 'رابط باید بداند چه دکمه‌ای نشان بدهد');
+  ok(run.stageFailed, 'نشانِ شکست روی اجرا می‌نشیند');
+  eq(run.stageFailed.stage, 'questions', 'کدام مرحله رد شد');
+  eq(run.stageFailed.message, 'این مرحله خروجی درستی نداد. دوباره تلاش کن.',
+     'جمله‌ای که کاربر می‌بیند');
+
+  // مهم‌ترین ادعا: اجرا نمرده
+  ok(run.stages.knowledge, 'شناخت کسب‌وکار سر جایش ماند');
+  ok(run.stages.market,    'بازار سر جایش ماند');
+  ok(run.stages.insight,   'جمله‌ی اول سر جایش ماند');
+  ok(!run.stages.questions, 'ولی مرحله‌ی ردشده ذخیره نشد — خروجی نامعتبر از نبودش بدتر است');
+
+  eq(run.schemaRejects.questions.streak, 1, 'ردِ اول شمرده شد');
+  eq(run.schemaRejects.questions.total,  1, 'و در کل هم یک بار');
+
+  // زیر آستانه، نامِ فیلد به کاربر گفته نمی‌شود — تلاش بعدی احتمالاً می‌گیرد
+  eq(run.stageFailed.exhausted, false, 'یک بار رد یعنی هنوز جای تلاش دوباره هست');
+  eq(run.stageFailed.fields.length, 0, 'و هنوز لازم نیست کاربر اسم فیلد اسکیما را ببیند');
+  eq(run.stageFailed.advice, null, 'و هنوز پیشنهاد عوض‌کردن ورودی داده نمی‌شود');
+
+  // ── سه بار پشت سر هم ──
+  await advance(run);
+  const r3 = await advance(run);
+
+  eq(run.schemaRejects.questions.streak, 3, 'سه ردِ پشت سر هم شمرده شد');
+  eq(r3.state, 'stage_failed', 'هنوز ۵۰۰ نیست — فقط دیگر امیدی به تکرار نیست');
+  eq(run.stageFailed.exhausted, true, 'بعد از سه بار، تلاش دوباره جواب نیست');
+  ok(run.stageFailed.fields.length > 0,
+     `حالا باید بگوید کدام فیلد: ${JSON.stringify(run.stageFailed.fields)}`);
+  ok(run.stageFailed.why.length > 0, 'و چه چیزی غلط آمد');
+  ok(/ورودی را عوض کن/.test(run.stageFailed.advice || ''),
+     `و پیشنهاد بدهد ورودی عوض شود: ${run.stageFailed.advice}`);
+
+  // ── وقتی بالاخره گرفت ──
+  delete process.env.VOHU_DRY_FAIL;
+  await advance(run);
+
+  ok(run.stages.questions, 'با خروجی درست، مرحله جلو می‌رود');
+  ok(!run.stageFailed, 'نشانِ شکست برداشته می‌شود');
+  eq(run.schemaRejects.questions.streak, 0, 'شمارنده‌ی پشت‌سرهم صفر می‌شود');
+  eq(run.schemaRejects.questions.total, 3,
+     'ولی کل ردها می‌ماند — این همان عددی است که می‌گوید پرامپت ایراد دارد یا ورودی');
+});
+
+// ── خطایی که واقعاً خطای سرور است، پنهان نمی‌شود ──
+//
+// اگر هر استثنایی به «حالت» تبدیل شود، خرابیِ واقعی سبز دیده می‌شود و آن
+// از ۵۰۰ هم بدتر است. اینجا نبودِ fixture (یک خطای واقعی، نه بی‌انضباطیِ
+// مدل) باید همان‌طور بالا برود.
+//
+// منابع عمداً *قبل* از خراب‌کردن fixtureها خوانده می‌شوند: شکستِ منبع خودش
+// یک حالتِ مدیریت‌شده است و اگر از آن راه برویم، چیزی که می‌سنجیم آن است
+// نه این.
+await runAsUser('tester-schema', async () => {
+  const U = 'https://www.instagram.com/real-error-test';
+  const run = await startRun({ url: U, note: 'خطای غیراسکیما' });
+  await advance(run);                       // منابع و شناخت با fixtureهای سالم
+  run.input.competitors = [];
+  ok(run.stages.knowledge, 'پیش‌شرط: تا شناخت رسیدیم');
+
+  const keep = process.env.VOHU_FIXTURES;
+  process.env.VOHU_FIXTURES = '/nonexistent-fixtures-dir';   // حالا fixture نیست
+  let threw = null;
+  try { await advance(run); } catch (e) { threw = e; }
+  process.env.VOHU_FIXTURES = keep;
+
+  ok(threw, 'خطای غیراسکیما همچنان بالا می‌رود، نه اینکه حالت شود');
+  ok(/fixture/.test(String(threw?.message)), `و همان خطای واقعی است: ${threw?.message}`);
+  ok(!run.stageFailed, 'و نشانِ «ردِ اسکیما» روی اجرا نمی‌نشیند');
+});
+
 // ── کلیدواژه‌ی شمارش ──
 eq(actionKeyword('در کامنت بنویس «اصالت» تا برایت بفرستم'), 'اصالت', 'کلیدواژه از داخل گیومه');
 eq(actionKeyword('در دایرکت کلمه‌ی اصالت را بفرست'), null, 'اقدام دایرکتی کلیدواژه‌ی شمردنی ندارد');

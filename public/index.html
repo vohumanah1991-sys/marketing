@@ -370,6 +370,9 @@ function paint(){
   // سررسید که رسید، اول همین. بقیه‌ی صفحه‌ها منتظر می‌مانند — این تنها
   // جایی است که حلقه بسته می‌شود و بدون آن هر دور از صفر شروع می‌کند.
   if (S.followUp?.state === 'due') return followUp();
+  // مرحله‌ای که خروجی بدشکل داد. قبل از بقیه چون تا این رد نشود، صفحه‌ی
+  // بعدی داده‌ی همان مرحله را ندارد و خالی درمی‌آید.
+  if (S.state === 'stage_failed' && S.stageFailed) return stageFailed();
   if (S.state === 'low_confidence') return lowConf();
   if (S.needs === 'pageText')    return pageBlocked();
   if (S.needs === 'competitors') return competitors();
@@ -581,6 +584,37 @@ function pageBlocked(){
   <textarea id="pt" rows="6" placeholder="متن صفحه را اینجا بچسبان (دست‌کم ۲۰۰ نویسه)"></textarea>
   <button onclick="sendPageText()">با این متن ادامه بده</button>`;
 }
+/**
+ * مرحله‌ای که خروجی بدشکل داد — نه «خطای سرور».
+ *
+ * تفاوتش با errBox این است که اینجا هیچ‌چیز خراب نشده: مرحله‌های قبلی
+ * ذخیره‌اند و «تلاش دوباره» فقط همین یک مرحله را می‌زند. «شروع از نو»
+ * عمداً دکمه‌ی دوم و کم‌رنگ است — اولین کاری که به ذهن می‌رسد نباید
+ * دور ریختن کاری باشد که پولش داده شده.
+ */
+function stageFailed(){
+  const f = S.stageFailed || {};
+  const again = faNum(f.streak || 1);
+  M.innerHTML = `${sourceBar()}<div class="day">نشد</div>
+  <h2>${esc(f.label || 'این مرحله')} خروجی درستی نداد</h2>
+  <div class="gate">${esc(f.message || 'این مرحله خروجی درستی نداد. دوباره تلاش کن.')}</div>
+  ${f.exhausted ? `<p class="sm">${esc(f.advice || '')}</p>` : ''}
+  ${f.exhausted && (f.why||[]).length
+      ? `<p class="sm">آنچه هر بار غلط آمد:</p>`
+        + (f.why||[]).map(w=>`<div class="sm">✗ ${esc(w)}</div>`).join('')
+      : ''}
+  <p class="sm">مرحله‌های قبلی ذخیره‌اند — تلاش دوباره فقط همین یک مرحله را می‌زند، از اول شروع نمی‌کند.</p>
+  <button onclick="retryStage()">دوباره تلاش کن</button>
+  <button class="g" onclick="reset()">آدرس دیگری می‌دهم</button>
+  ${f.streak > 1 ? `<p class="sm" style="opacity:.7;margin-top:14px">${again} بار پشت سر هم اینجا رد شده.</p>` : ''}`;
+}
+function retryStage(){
+  if (busy) return;
+  const f = S.stageFailed || {};
+  spin(`${f.label || 'همان مرحله'} را دوباره می‌زنم…`, true);
+  api('/api/run/retry', { url });
+}
+
 function sendPageText(){
   const t = val('pt');
   if (t.length < 200) { alert('متن خیلی کوتاه است — دست‌کم ۲۰۰ نویسه لازم دارم.'); return; }

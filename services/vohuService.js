@@ -272,6 +272,10 @@ export async function guardSchema({ schema, toolName = 'result', attempt, maxAtt
         `مدل خروجیِ بدشکل داد و تلاش دوباره هم درست نشد — ${bad.slice(0, 3).map(v => v.why).join('؛ ')}`);
       err.hint = 'این مرحله ذخیره نشد: خروجیِ نامعتبر از نبودش بدتر است، چون مرحله‌های بعدی '
                + 'روی آن ساخته می‌شوند. دوباره بزن؛ اگر تکرار شد، مدل را عوض کن.';
+      // نشانِ ماشین‌خوان، جدا از متن فارسی: صداکننده باید بتواند ردِ اسکیما
+      // را از قطعیِ شبکه یا خطای سرویس تفکیک کند بدون اینکه پیام را بخواند.
+      // بدون این، هر خطایی یک ۵۰۰ می‌شد و اجرا همان‌جا می‌مرد.
+      err.kind = 'schema';
       err.violations = bad;
       err.usage = acc;
       throw err;
@@ -385,6 +389,19 @@ export async function callWithSchema({
   // حالت خشک از دروازه‌ی اسکیما رد نمی‌شود: آنجا مدلی در کار نیست و خروجی
   // fixture خودمان است. دروازه برای بی‌انضباطیِ مدل است، نه برای داده‌ی خودمان.
   if (process.env.VOHU_DRY_RUN) {
+    // ── قلاب تست: «مدل خروجی بدشکل داد» ──────────────────────
+    // این تنها مسیری در کل زنجیره است که بدون آن آزمودنی نیست: تولیدش
+    // نیاز دارد مدل واقعی دو بار پشت سر هم بدشکل جواب بدهد — یعنی پول
+    // دادن و امید بستن. با این قلاب، همان مسیر (دو تلاش، یادداشت اصلاح،
+    // خطای kind='schema') عیناً اجرا می‌شود، فقط بدون توکن.
+    // فهرست با کاما: VOHU_DRY_FAIL=questions,market
+    const fail = (process.env.VOHU_DRY_FAIL || '').split(',').map(x => x.trim()).filter(Boolean);
+    if (fail.includes(toolName)) {
+      return guardSchema({
+        schema, toolName, maxAttempts: 2,
+        attempt: () => ({ data: {}, meta: { model: 'dry-run', provider: 'dry-run', ms: 0 } })
+      });
+    }
     const data = await dryRun(toolName);
     const meta = { model: 'dry-run', provider: 'dry-run', ms: 0 };
     return { data: stamp(data, meta), meta };
