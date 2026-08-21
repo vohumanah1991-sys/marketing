@@ -14,7 +14,7 @@ import { apifyEnabled, classifyInstagramUrl, redact } from '../services/apify.js
 import { itemsToText, contentType, extractTags, readTranscript, buildContentItem, itemToText } from '../lib/instagram.js';
 import { resolveLimits } from '../lib/igSync.js';
 import { loadRun } from '../services/store.js';
-import { costOf, restoredInfo } from '../lib/session.js';
+import { costOf, restoredInfo, rankCandidates } from '../lib/session.js';
 import { isRealText, textResult, dedupeTexts } from '../services/media.js';
 import * as VS from '../services/vohuService.js';
 import { faModelError, faModelHint, configuredProvider, activeEngine, callWithSchema } from '../services/vohuService.js';
@@ -991,6 +991,122 @@ const STORED = {
     strategy: { producedBy: { provider: 'openai', model: 'gpt-5-mini', at: '2026-08-18T10:00:00Z' } }
   }
 };
+
+// ── رتبه‌بندی مشاهده‌ها: اطمینان × اهمیت ─────────────────────
+// امتیاز الگو به‌تنهایی، مشاهده‌ی قطعیِ بی‌اثر را بالای فهرست می‌نشاند.
+
+const INSIGHT_PROMPT = V.FIRST_INSIGHT_PROMPT({
+  knowledge: {}, competitorMap: {}, contentAnalysis: {}, market: {} });
+
+t('پرامپت جمله‌ی اول دو عدد می‌خواهد، نه یکی', () => {
+  const text = INSIGHT_PROMPT;
+  ok(/اطمینان/.test(text) && /اهمیت/.test(text), 'هر دو مفهوم باید نام برده شوند');
+  ok(/تکان بدهد/.test(text), 'اهمیت باید همان «چقدر می‌تواند تکان بدهد» تعریف شود');
+  ok(/اطمینان × اهمیت/.test(text), 'ترتیب باید صریح ترکیب هر دو باشد');
+  ok(/قوی‌ترین شاهد[\s\S]{0,60}بی‌اثر/.test(text),
+     'باید بگوید شاهد محکمِ بی‌اثر، جمله‌ی اول نمی‌شود');
+});
+
+t('اسکیمای جمله‌ی اول، اهمیت را اجباری می‌کند', () => {
+  const items = V.FIRST_INSIGHT_SCHEMA.properties.candidates.items;
+  ok(items.required.includes('strength') && items.required.includes('impact'),
+     'هر دو عدد باید اجباری باشند، وگرنه مدل یکی را جا می‌اندازد');
+  eq(items.properties.impact.minimum, 0);
+  eq(items.properties.impact.maximum, 1);
+  ok(items.properties.strength.description.includes('اطمینان'), 'معنی strength باید صریح باشد');
+});
+
+t('ترتیب مشاهده‌ها را کد می‌چیند، نه ترتیبی که مدل داده', () => {
+  const out = rankCandidates([
+    { pattern: 'proof',       strength: 0.95, impact: 0.2 },   // قطعی ولی بی‌اثر
+    { pattern: 'entry_point', strength: 0.60, impact: 0.9 },   // کم‌مطمئن‌تر، پرتکان
+    { pattern: 'fear',        strength: 0.50, impact: 0.5 }
+  ]);
+  // proof با اطمینان ۰٫۹۵ ته فهرست می‌افتد (۰٫۹۵×۰٫۲=۰٫۱۹) و fear با اطمینان
+  // ۰٫۵ بالاتر می‌نشیند (۰٫۵×۰٫۵=۰٫۲۵) — دقیقاً همان چیزی که امتیاز الگو تنها نمی‌دید.
+  eq(out.map(c => c.p).join(','), 'entry_point,fear,proof',
+     'مشاهده‌ی قطعیِ بی‌اثر نباید بالای فهرست بماند');
+  eq(out[0].score.toFixed(2), '0.54');
+  ok(out.every(c => c.s != null && c.i != null), 'هر دو عدد باید بیرون بروند تا در رابط دیده شوند');
+});
+
+t('اهمیتِ نبوده ساخته نمی‌شود', () => {
+  // کارت‌های قبل از این قاعده impact ندارند — صفر گذاشتن یعنی «سنجیدم و هیچ»
+  const [a] = rankCandidates([{ pattern: 'x', strength: 0.8 }]);
+  eq(a.i, null, 'اهمیتِ نبوده باید null بماند، نه صفر');
+  eq(a.score, 0.8, 'و امتیاز همان اطمینان می‌شود، نه صفر');
+
+  eq(rankCandidates([]).length, 0);
+  eq(rankCandidates(null).length, 0, 'نبودِ candidates نباید بترکد');
+  const [b] = rankCandidates([{ pattern: 'y', strength: 5, impact: -2 }]);
+  ok(b.s === 1 && b.i === 0, `عدد بیرون از بازه باید مهار شود: ${JSON.stringify(b)}`);
+  eq(rankCandidates([{ pattern: 'z', strength: 'زیاد' }])[0].score, null, 'عدد نبودن یعنی امتیاز نامعلوم');
+});
+
+t('هر دو عدد روی صفحه دیده می‌شوند — وگرنه معلوم نیست چرا این اول آمده', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ui = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  const grab = n => (ui.match(new RegExp('function ' + n + '\\([\\s\\S]*?\\n}')) || [])[0];
+  ok(grab('patternBars'), 'patternBars پیدا نشد');
+  ok(/اطمینان × اهمیت = امتیاز/.test(ui), 'راهنمای نمودار باید بگوید این عددها چیستند');
+
+  const draw = new Function('c', grab('patternBars') + '; return patternBars(c);');
+  const out = draw([{ p: 'fear', s: 0.8, i: 0.9, score: 0.72 },
+                    { p: 'proof', s: 0.95, i: null, score: 0.95 }]);
+  ok(out.includes('0.80') && out.includes('0.90') && out.includes('0.72'),
+     `هر سه عدد باید نوشته شوند: ${out}`);
+  ok(/—/.test(out) && !/0\.00/.test(out), `عددِ نبوده باید «—» باشد، نه صفر: ${out}`);
+});
+
+t('نمونه‌ی حالت خشک هم دو عدد دارد و ترتیبش با انتخابش جور است', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ins = JSON.parse(await readFile(new URL('../fixtures/first_insight.json', import.meta.url), 'utf8'));
+  ok(ins.candidates.every(c => typeof c.impact === 'number'), 'همه‌ی candidateها باید impact داشته باشند');
+  const top = rankCandidates(ins.candidates)[0];
+  eq(top.p, ins.chosen.pattern, 'جمله‌ی انتخاب‌شده باید همان صدرنشین ترتیب تازه باشد');
+});
+
+// ── سؤالی که از هر کسی می‌شود پرسید، سؤال نیست ───────────────
+
+const Q_PROMPT = V.QUESTIONS_PROMPT({ knowledge: {}, mission: 'x' });
+
+t('پرامپت سؤال‌ها، سؤالِ فرم‌مانند را رد می‌کند', () => {
+  ok(/فرم/.test(Q_PROMPT), 'باید اسمش را بگذارد: این فرم است، نه سؤال');
+  ok(/کلمه‌به‌کلمه/.test(Q_PROMPT), 'محک باید عملی باشد: همین جمله را از کسب‌وکار دیگری هم می‌شود پرسید؟');
+  ok(/در متن خود سؤال/.test(Q_PROMPT),
+     'اشاره باید در خود سؤال باشد، نه در whyItMatters — کاربر فقط سؤال را می‌خواند');
+  ok(/groundedIn/.test(Q_PROMPT), 'و باید بگوید کدام تکه‌ی شناخت سؤال را ساخت');
+});
+
+t('«هدف این ماه» فقط با دو شاخه‌ی نام‌دار مجاز است', () => {
+  ok(/دو مسیر مشخص|دو شاخه/.test(Q_PROMPT), 'شرط دو شاخه باید صریح باشد');
+  ok(/نام هر دو در خود سؤال/.test(Q_PROMPT), 'و نامشان باید در خود سؤال بیاید');
+  ok(/هدف این ماه چیست/.test(Q_PROMPT), 'باید نمونه‌ی غلط را هم نشان بدهد');
+  ok(/assumptions/.test(Q_PROMPT), 'اگر دو شاخه نبود، به‌جای سؤال باید فرض بگذارد');
+
+  // پرامپت نباید خودش را نقض کند: این جمله قبلاً مثالِ «درست» بود
+  const generic = 'سه ماه آینده فروش برایت مهم‌تر است یا شناخته‌شدن؟';
+  const i = Q_PROMPT.indexOf(generic);
+  ok(i > -1, 'نمونه هنوز باید باشد — ولی به‌عنوان مثال غلط');
+  ok(/غلط: $/m.test(Q_PROMPT.slice(0, i)) || Q_PROMPT.slice(Math.max(0, i - 12), i).includes('غلط'),
+     'جمله‌ی همه‌جایی باید زیر «غلط» باشد، نه زیر «درست»');
+});
+
+t('اسکیمای سؤال‌ها groundedIn را اجباری می‌کند', () => {
+  const items = V.QUESTIONS_SCHEMA.properties.questions.items;
+  ok(items.required.includes('groundedIn'),
+     'نبودش باید همان اول گیر بیفتد، وگرنه قاعده فقط یک توصیه در پرامپت است');
+  ok(items.properties.groundedIn.description.includes('شناخت'));
+});
+
+t('سؤال‌های نمونه هم ریشه دارند و روی صفحه نشان داده می‌شوند', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const q = JSON.parse(await readFile(new URL('../fixtures/questions.json', import.meta.url), 'utf8'));
+  ok(q.questions.length && q.questions.every(x => x.groundedIn && x.groundedIn.length > 15),
+     'هر سؤال نمونه باید ریشه‌اش را بگوید');
+  const ui = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  ok(/از کجا پرسیدم: \$\{esc\(q\.groundedIn\)\}/.test(ui), 'ریشه‌ی سؤال باید به کاربر نشان داده شود');
+});
 
 // ── «جواب داد» باید شمردنی باشد ──────────────────────────────
 // نشانه‌ی موفقیت بدون عدد و خط پایه، دو هفته بعد قابل راستی‌آزمایی نیست؛

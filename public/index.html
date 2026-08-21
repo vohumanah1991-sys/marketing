@@ -603,9 +603,25 @@ function lowConf(){
   <button class="g" onclick="reset()">از اول با ورودی بیشتر</button>`;
 }
 
+/**
+ * نمودار الگوها — دو عدد، نه یکی.
+ *
+ * ترتیب از سرور می‌آید (اطمینان × اهمیت). هر دو عدد نوشته می‌شود تا کاربر
+ * ببیند چرا این یکی بالاست: شاهد محکم‌تری داشته، یا بیشتر تکان می‌دهد.
+ * عددِ نبوده «—» می‌شود، نه صفر — صفر یعنی «سنجیدم و هیچ»، و آن را نمی‌دانیم.
+ */
+function patternBars(cands){
+  const f2 = v => v == null ? ' — ' : v.toFixed(2);
+  return (cands||[]).map(c => {
+    const w = Math.round((c.score ?? c.s ?? 0) * 16);
+    return String(c.p||'?').padEnd(12) + '█'.repeat(w).padEnd(16,'·')
+         + '  ' + f2(c.s) + ' × ' + f2(c.i) + ' = ' + f2(c.score);
+  }).join('\n');
+}
+
 function questions(){
   const I = S.insight, Q = S.questions;
-  const bars = (I.candidates||[]).map(c=>c.p.padEnd(12)+'█'.repeat(Math.round(c.s*16)).padEnd(16,'·')+' '+c.s.toFixed(2)).join('\n');
+  const bars = patternBars(I.candidates);
   M.innerHTML = `<div class="day">دو دقیقه بعد</div>
   <p class="big">${esc(I.sentence)}</p>
   <div class="card"><b>و ${(I.supporting||[]).length} چیز دیگر که دیدم</b>
@@ -614,12 +630,15 @@ function questions(){
   <div class="more" onclick="tog('ev')">از کجا فهمیدی؟</div>
   <div class="fold" id="ev">
     <div class="card"><b>شواهد</b><div class="sm">${esc(I.evidence)}</div></div>
-    <div class="card"><b>هفت الگو</b><div class="bars">${esc(bars)}</div></div>
+    <div class="card"><b>هفت الگو</b>
+      <div class="sm" style="margin-bottom:6px">اطمینان × اهمیت = امتیاز — ترتیب از همین می‌آید</div>
+      <div class="bars">${esc(bars)}</div></div>
     ${S.market?.vocab?.length?`<div class="card"><b>زبان خریدار</b><div class="sm">${S.market.vocab.map(v=>`می‌گویند «${esc(v.theySay)}» — نه «${esc(v.notThis)}»`).join('<br>')}</div></div>`:''}
   </div>
   <hr style="border:none;border-top:1px solid var(--line);margin:26px 0">
   <div class="day">${(Q.questions||[]).length} چیز را نمی‌دانم</div>
   <div id="qs">${(Q.questions||[]).map((q,i)=>`<div class="q"><h3>${i+1}. ${esc(q.question)}</h3>
+    ${q.groundedIn?`<div class="why" style="opacity:.85">از کجا پرسیدم: ${esc(q.groundedIn)}</div>`:''}
     <div class="why">چرا مهم است: ${esc(q.whyItMatters)}</div>
     <div class="opts">${(q.options||['نمی‌دانم']).map(o=>`<span class="chip" data-q="${i}" onclick="pick(this)">${esc(o)}</span>`).join('')}</div>
     <input class="qt" data-q="${i}" placeholder="یا خودت بنویس"></div>`).join('')}</div>

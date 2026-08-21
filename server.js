@@ -13,7 +13,7 @@ import express from 'express';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { check, timed, buildId } from './lib/selftest.js';
-import { startRun, getRun, advance, normalizeSource, restoredInfo } from './lib/session.js';
+import { startRun, getRun, advance, normalizeSource, restoredInfo, rankCandidates } from './lib/session.js';
 import { saveRun, storeDir } from './services/store.js';
 import { checkContent } from './lib/pipeline.js';
 import { createJob, getJob, listJobs, registerHandler, markInterrupted } from './services/jobs.js';
@@ -86,7 +86,7 @@ const view = r => ({
                 evidence: r.run.stages.insight.chosen?.evidence,
                 supporting: r.run.stages.insight.supporting || [],
                 scope: r.run.stages.insight.scope,
-                candidates: (r.run.stages.insight.candidates || []).map(c => ({ p: c.pattern, s: c.strength })),
+                candidates: rankCandidates(r.run.stages.insight.candidates),
                 confident: r.run.stages.insight.confident,
                 fallback: r.run.stages.insight.fallback } : null,
   questions: r.run.stages.questions || null,
