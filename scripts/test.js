@@ -1492,19 +1492,21 @@ t('اجرای تازه بنر «قدیمی است» نمی‌گیرد', () => {
   eq(restoredInfo(null, '2026-08-18T10:00:00Z'), null, 'بدون اجرا هم چیزی ادعا نمی‌شود');
 });
 
-t('آدرسی که هرگز اجرا نشده، بنر «قدیمی است» نمی‌گیرد', async () => {
-  // loadRun برای آدرس ناشناخته هم یک شیء تازه با createdAt می‌سازد. اگر
-  // ملاک createdAt باشد، کاربری که اولین بار یک آدرس را باز می‌کند بنر
-  // «این نتیجه از قبل ذخیره شده بود» می‌بیند — روی اجرایی که وجود ندارد.
+t('اجرای نبوده، با createdAt هم بنر نمی‌گیرد', () => {
+  // loadRun برای آدرس ناشناخته یک شیء تازه با createdAt می‌سازد. اگر جایی
+  // ملاکِ «ذخیره‌شده بودن» را createdAt بگذارد، کاربری که اولین بار یک آدرس
+  // را باز می‌کند بنر «از قبل ذخیره شده بود» می‌بیند — روی اجرایی که نیست.
+  eq(restoredInfo({ url: 'x', stages: {}, createdAt: '2026-08-01T00:00:00Z' }, null), null,
+     'restoredAt خالی یعنی هیچ ادعایی نیست، هرچقدر هم createdAt داشته باشد');
+});
+
+tShell('سرِ /api/run ملاکش updatedAt است، نه createdAt', async () => {
   const { readFile } = await import('node:fs/promises');
   const srv = await readFile(new URL('../server.js', import.meta.url), 'utf8');
   const block = srv.match(/app\.get\('\/api\/run',[\s\S]*?\n\}\)\);/)[0];
   ok(/restoredAt: run\.updatedAt \|\| null/.test(block),
-     `ملاک باید updatedAt باشد، نه createdAt: ${block.slice(-160)}`);
+     `ملاک باید updatedAt باشد: ${block.slice(-160)}`);
   ok(!/run\.createdAt/.test(block), 'createdAt روی اجرای نساخته هم هست، پس ملاک نیست');
-
-  // و خودِ restoredInfo هم با restoredAt خالی چیزی ادعا نمی‌کند
-  eq(restoredInfo({ url: 'x', stages: {}, createdAt: '2026-08-01T00:00:00Z' }, null), null);
 });
 
 t('اجرای ذخیره‌شده تاریخ و سازنده‌اش را می‌گوید', () => {
