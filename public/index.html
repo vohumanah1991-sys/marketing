@@ -56,10 +56,19 @@ button.g{background:var(--card);color:var(--ink);border:1px solid var(--line);fo
 .cl{font-size:13.5px;padding:9px 0;border-bottom:1px solid #f2efea;line-height:1.9}
 .cl:last-child{border:none}
 .hide{display:none}
+/* دکمه‌ی کوچک داخل خط — دکمه‌ی معمولی عرض کامل می‌گیرد و در هدر جا نمی‌شود */
+.hbtn{width:auto;margin:0;padding:6px 12px;font-size:12.5px;border-radius:9px;font-weight:600;white-space:nowrap}
+/* «این را قبلاً ساخته‌ام» — هشدار نیست، ولی باید دیده شود */
+.old{background:var(--ambs);border:1px solid #ecdcae;border-radius:12px;padding:12px 15px;
+ margin-bottom:12px;font-size:13.5px;color:var(--amb);line-height:2}
 </style></head><body>
 <div class="app">
 <header><div class="brand">وُهو <small id="who"></small></div>
-<div class="sm" id="stg"></div></header>
+<!-- «شروع از نو» در هر حالتی همین‌جاست، نه فقط در صفحه‌ی خطا: اجرای
+     ذخیره‌شده بی‌سروصدا برمی‌گردد و بدون این، تنها راه پاک‌کردن دستی .vohu بود. -->
+<div class="sm" style="display:flex;gap:10px;align-items:baseline">
+<span id="stg"></span>
+<button class="g hbtn" type="button" onclick="freshStart()">شروع از نو</button></div></header>
 <main id="m"></main>
 </div>
 
@@ -234,6 +243,17 @@ async function api(path, body, method='POST', timeoutMs=300000){
  * در فایل وضعیت مانده و بدون این، هر بار همان بن‌بست تکرار می‌شود.
  */
 function freshStart(){
+  // منابعِ همین اجرا اولویت دارند: دکمه حالا در هدرِ *همه‌ی* صفحه‌هاست، پس
+  // بیشتر وقت‌ها url پر است. فرستادن فقط url یعنی اینستاگرام و تلگرامی که
+  // کاربر داده بود بی‌صدا از اجرای تازه می‌افتند.
+  const src = (S.page && S.page.sources) || [];
+  if (src.length) {
+    const pick = k => { const x = src.find(s => s.kind === k); return x ? x.url : ''; };
+    spin('از نو شروع می‌کنم…', true);
+    api('/api/run', { fresh:true, site: pick('site'), instagram: pick('instagram'),
+                      telegram: pick('telegram'), note: (S.note || '') });
+    return;
+  }
   // همان منابعی که کاربر داده بود، این بار با fresh — نه فقط url.
   // اگر اولین درخواست خطا داده باشد url هنوز خالی است (فقط بعد از جواب
   // موفق پر می‌شود) و بدون این، دکمه کاربر را به فرم خالی برمی‌گرداند:
@@ -282,7 +302,63 @@ function render(){
   clearInterval(spinTimer);
   $('#who').textContent = url ? '· ' + url.replace(/^https?:\/\//,'') : '';
   $('#stg').textContent = S.stages ? S.stages.length + ' مرحله' : '';
+  paint();
+  // بعد از رسم، نه داخلش: هر صفحه M.innerHTML خودش را می‌نویسد و
+  // نوار باید بالای همه‌شان بنشیند بدون اینکه در تک‌تکشان تکرار شود.
+  restoredBar();
+}
 
+/** چه تاریخی — تقویم فارسی، و اگر مرورگر نداشت همان ISO. */
+function dayFa(iso){
+  const d = new Date(iso || '');
+  if (isNaN(d)) return null;
+  try { return d.toLocaleDateString('fa-IR'); } catch { return d.toISOString().slice(0,10); }
+}
+/** رقم فارسی — کنار تاریخِ تقویم فارسی، عدد لاتین وصله‌ی ناجور است. */
+function faNum(n){ return String(n).replace(/[0-9]/g, d => '۰۱۲۳۴۵۶۷۸۹'[d]); }
+
+/** چقدر پیش — «۳ روز پیش» بیشتر از یک تاریخ به کاربر می‌گوید. */
+function agoFa(iso){
+  const d = new Date(iso || '');
+  if (isNaN(d)) return null;
+  const h = (Date.now() - d.getTime())/3600000;
+  if (h < 0) return null;                       // ساعت سیستم عقب است — عدد نساز
+  return h < 1 ? 'همین حالا'
+       : (h < 48 ? faNum(Math.round(h))+' ساعت پیش' : faNum(Math.round(h/24))+' روز پیش');
+}
+
+/**
+ * «این را همین حالا نساختم» — بالای هر نتیجه‌ای که از انبار درآمده.
+ *
+ * سه بار کاربر نتیجه‌ی چند روز پیش را نتیجه‌ی همین حالا گرفت. تاریخ و
+ * سرویس/مدلِ سازنده از سرور می‌آید (مهر producedBy)، در کد چیزی حدس زده نمی‌شود.
+ *
+ * و اگر سرویس/مدل فعلی با سازنده فرق دارد، صریح گفته می‌شود: بی‌سروصدا
+ * نشان‌دادن خروجی مدل قبلی زیر نام مدل فعلی، همان گمراهی است.
+ */
+function restoredBar(){
+  const r = S.restored;
+  if (!r) return;
+  const by  = [r.provider, r.model].filter(Boolean).join('/');
+  const day = dayFa(r.at), ago = agoFa(r.at);
+
+  let head = day ? `این نتیجه‌ی ${esc(day)} است` : 'این نتیجه از قبل ذخیره شده بود';
+  if (ago) head += ` — ${esc(ago)}`;
+  if (by)  head += ` · با ${esc(by)} ساخته شده`;
+
+  let h = `<div class="old">${head}
+    <button class="g hbtn" style="margin-inline-start:8px" onclick="freshStart()">شروع از نو</button></div>`;
+
+  if (r.mismatch) {
+    const now = [r.mismatch.provider, r.mismatch.model].filter(Boolean).join('/');
+    h += `<div class="gate">این را ${esc(by || 'سرویس دیگری')} ساخته، ولی الان ${esc(now)} فعال است.
+      آنچه می‌بینی خروجی مدل قبلی است، نه مدل فعلی.
+      <br><button class="g" style="margin-top:10px" onclick="freshStart()">با ${esc(now)} از نو بساز</button></div>`;
+  }
+  M.insertAdjacentHTML('afterbegin', h);
+}
+
+function paint(){
   if (!url && !S.needs) return start();
   if (S.state === 'low_confidence') return lowConf();
   if (S.needs === 'pageText')    return pageBlocked();
