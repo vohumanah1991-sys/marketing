@@ -1,0 +1,25 @@
+{
+  "hypothesisUpdates": [
+    {
+      "hypothesis": "ترسِ «تقلبی باشد» مانع اصلی خرید اول است",
+      "verdict": "supported",
+      "evidenceCount": 1,
+      "lastTestedAt": "2026-08-21",
+      "retire": false,
+      "promoteToFact": false,
+      "attributedBy": "user"
+    },
+    {
+      "hypothesis": "قیمت بالا به‌تنهایی مانع است",
+      "verdict": "weakened",
+      "evidenceCount": 1,
+      "lastTestedAt": "2026-08-21",
+      "retire": false,
+      "promoteToFact": false,
+      "attributedBy": "none"
+    }
+  ],
+  "tonePreferences": ["جمله‌های کوتاه‌تر، بدون صفت‌های تبلیغاتی"],
+  "contentPattern": null,
+  "learnedNothing": false
+}

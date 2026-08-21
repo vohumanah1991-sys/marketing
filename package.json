@@ -9,13 +9,14 @@
   "scripts": {
     "start": "node server.js",
     "dev": "VOHU_DRY_RUN=1 node server.js",
-    "test": "node scripts/test.js && node scripts/test-once.js",
+    "test": "node scripts/test.js && node scripts/test-once.js && node scripts/test-loop.js",
     "cli": "node run-vohu.js",
     "dry": "VOHU_DRY_RUN=1 node run-vohu.js",
     "extract": "node scripts/test-extraction.js",
     "verify": "node scripts/verify-facts.js",
     "stability": "node scripts/stability-check.js",
-    "test:once": "node scripts/test-once.js"
+    "test:once": "node scripts/test-once.js",
+    "test:loop": "node scripts/test-loop.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
