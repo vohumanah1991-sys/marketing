@@ -901,6 +901,7 @@ const FIXTURE_SCHEMA = {
   market:             'MARKET_SCHEMA',
   first_insight:      'FIRST_INSIGHT_SCHEMA',
   questions:          'QUESTIONS_SCHEMA',
+  assumptions:        'ASSUMPTIONS_SCHEMA',
   strategy_card:      'STRATEGY_CARD_SCHEMA',
   campaign:           'CAMPAIGN_SCHEMA',
   evidence_gate:      'EVIDENCE_GATE_SCHEMA',

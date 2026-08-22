@@ -217,6 +217,39 @@ await runAsUser('tester-schema', async () => {
      'ولی کل ردها می‌ماند — این همان عددی است که می‌گوید پرامپت ایراد دارد یا ورودی');
 });
 
+// ── مرحله‌ی سؤال‌ها دو فراخوان است، ولی یک نتیجه ──────────────
+//
+// یک فراخوانِ «هم سؤال هم حدس» روی ورودی واقعی ۴۰٪ رد می‌شد. حالا دو
+// فراخوان است. دو چیز باید سد داشته باشد:
+//   ۱. قرارداد پایین‌دست عوض نشده باشد — همان { questions, assumptions }.
+//   ۲. اگر نیمه‌ی دوم رد شود، تلاش دوباره پولِ نیمه‌ی اول را دوباره ندهد.
+//      بدون این، دوتکه‌کردن هر ردی را دو برابر گران می‌کرد.
+await runAsUser('tester-split', async () => {
+  const U = 'https://www.instagram.com/split-questions-test';
+  const run = await startRun({ url: U, note: 'آزمون دوتکه' });
+  await advance(run);
+  run.input.competitors = [];
+
+  process.env.VOHU_DRY_FAIL = 'assumptions';      // فقط نیمه‌ی دوم رد شود
+  const r = await advance(run);
+  delete process.env.VOHU_DRY_FAIL;
+
+  eq(r.state, 'stage_failed', 'ردِ نیمه‌ی دوم هم حالت است، نه ۵۰۰');
+  eq(run.stageFailed.stage, 'assumptions', 'و می‌گوید کدام نیمه رد شد');
+  ok(run.stages.questionsPart, 'نیمه‌ی اولِ موفق ذخیره شد — پولش دوباره داده نمی‌شود');
+  ok(!run.stages.questions, 'ولی مرحله هنوز تمام نشده');
+
+  const before = run.usage.calls;
+  await advance(run);                              // تلاش دوباره
+
+  ok(run.stages.questions, 'با نیمه‌ی دوم درست، مرحله کامل می‌شود');
+  ok(Array.isArray(run.stages.questions.questions), 'قرارداد: questions آرایه است');
+  ok(Array.isArray(run.stages.questions.assumptions), 'قرارداد: assumptions آرایه است');
+  ok(!run.stages.questionsPart, 'نیمه‌ی موقت پاک می‌شود');
+  eq(run.usage.calls - before, 1,
+     'تلاش دوباره فقط یک فراخوان تازه دارد — نیمه‌ی اول دوباره صدا زده نمی‌شود');
+});
+
 // ── خطایی که واقعاً خطای سرور است، پنهان نمی‌شود ──
 //
 // اگر هر استثنایی به «حالت» تبدیل شود، خرابیِ واقعی سبز دیده می‌شود و آن
