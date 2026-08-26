@@ -1202,8 +1202,8 @@ const POSTS = [
 t('خط پایه از آمار پست‌ها شمرده می‌شود، نه حدس زده', () => {
   const b = V.countedBaseline(POSTS);
   eq(b.recentN, 3);
-  eq(b.recent.comments, Math.round((83 + 250 + 175) / 3), 'میانگین سه پست *اخیر*، نه سه تای اول فهرست');
-  eq(b.all.comments, Math.round((83 + 250 + 175 + 14) / 4));
+  eq(b.recent.comments, 175, 'میانه‌ی سه پست *اخیر* (۸۳/۱۷۵/۲۵۰)، نه سه تای اول فهرست');
+  eq(b.all.comments, (83 + 175) / 2, 'میانه‌ی چهار پست، نه میانگینشان');
   eq(V.countedBaseline([]), null, 'بدون آمار، عددِ ساختگی ساخته نمی‌شود');
   eq(V.countedBaseline([{ id: 'x' }]), null);
 });
@@ -1231,7 +1231,10 @@ t('اختلافِ پنجره‌ی اخیر با کل تاریخ شمرده و ع
   ];
   const b = V.countedBaseline(surge);
   eq(b.recent.comments, 65);
-  eq(b.all.comments, 16, 'کل تاریخ عدد دیگری می‌گوید');
+  // میانه‌ی ۱۲ پست که ۹ تاشان صفرند، صفر است — و همین درست است: پستِ معمولیِ
+  // این حساب هیچ کامنتی نمی‌گیرد. میانگین (۱۶) را همان سه پستِ اخیر نوشته بود،
+  // یعنی عددی که قرار بود *مبنای مقایسه* با آن سه باشد، خودش از آن سه می‌آمد.
+  eq(b.all.comments, 0, 'کل تاریخ عدد دیگری می‌گوید — میانه، نه میانگین');
   eq(b.trend.comments.diverged, true);
   eq(b.trend.comments.direction, 'up');
   eq(b.trend.likes.diverged, false, 'متریکی که تکان نخورده، هشدار الکی نمی‌گیرد');
@@ -1255,8 +1258,8 @@ t('اختلاف زیاد، صریح در کارت نوشته می‌شود — �
   ok(card.measurement.baseline.includes('در هر پست'), 'به‌ازای هر پست، نه مجموع');
   ok(card.measurement.baseline.includes('3 پست اخیر'), 'و از پنجره‌ی اخیر، نه کل تاریخ');
   const note = card.measurement.baselineTrend;
-  ok(note, 'اختلاف ۶۵ به ۱۶ نباید بی‌صدا رد شود');
-  ok(note.includes('65') && note.includes('16'), note);
+  ok(note, 'اختلاف ۶۵ به ۰ نباید بی‌صدا رد شود');
+  ok(note.includes('65') && note.includes('(0 کامنت)'), note);
   ok(/بالا رفته/.test(note), note);
   eq(r.trend, note, 'فراخوان هم خبردار می‌شود، نه فقط کارت');
 
@@ -1300,7 +1303,7 @@ t('خط پایه‌ی خالی، وقتی عدد داریم، پر می‌شود
   const r = V.GATES.fillBaseline(card, V.countedBaseline(POSTS));
   ok(r.filled, JSON.stringify(r));
   eq(r.filled.metric, 'comments');
-  ok(card.measurement.baseline.includes('169'), card.measurement.baseline);
+  ok(card.measurement.baseline.includes('175'), card.measurement.baseline);
   eq(card.measurement.baselineOrigin, 'counted_by_code');
   ok(card.measurement.countedFrom, 'عددها باید همراه کارت بمانند تا بعداً قابل بازبینی باشند');
 });
@@ -1326,7 +1329,7 @@ t('عددهای شمرده‌شده واقعاً به مرحله‌ی کارت �
   const p = V.STRATEGY_CARD_PROMPT({ knowledge: {}, insight: 'x', answers: {}, constraints: [],
                                      fatigue: [], baselines: V.countedBaseline(POSTS) });
   ok(p.includes('خط پایه‌های شمرده‌شده'), 'بخش خط پایه باید در پرامپت باشد');
-  ok(p.includes('169'), 'خودِ عدد باید در پرامپت باشد، نه فقط دستور «حدس نزن»');
+  ok(p.includes('175'), 'خودِ عدد باید در پرامپت باشد، نه فقط دستور «حدس نزن»');
   ok(p.includes('به‌ازای هر پست، نه مجموع'), 'قاعده‌ی واحد باید صریح باشد');
   ok(p.includes('از پنجره‌ی اخیر، نه کل تاریخ'), 'قاعده‌ی پنجره باید صریح باشد');
   ok(/diverged/.test(p), 'مدل باید بداند کِی موظف است اختلافِ پنجره را بگوید');
@@ -1349,8 +1352,8 @@ t('افت رسیدن با واکنشِ ثابت، یک توضیح رقیب شم�
   const c = V.reachConfound(V.countedBaseline(REACH_DROP));
   ok(c, 'بازدید ۱۰۰۰ در برابر ۴۰۰۰ با کامنتِ ثابت باید توضیح رقیب بسازد');
   eq(c.reach.metric, 'views');
-  // میانگین کل: (۳×۱۰۰۰ + ۹×۴۰۰۰)/۱۲ = ۳۲۵۰ — هر دو عدد باید در جمله باشند
-  ok(c.sentence.includes('1000') && c.sentence.includes('3250'), c.sentence);
+  // میانه‌ی کل: ۹ پست ۴۰۰۰ و ۳ پست ۱۰۰۰ ← ۴۰۰۰. هر دو عدد باید در جمله باشند
+  ok(c.sentence.includes('1000') && c.sentence.includes('4000'), c.sentence);
   ok(/به‌ازای هر بیننده/.test(c.sentence), 'باید بگوید محتوا به‌ازای هر بیننده بهتر شده، نه بدتر');
   eq(c.steady.map(x => x.metric).sort().join(','), 'comments,likes');
 
@@ -2425,6 +2428,98 @@ tShell('شماره‌ی نسخه از git می‌آید، نه از فایلی �
 
   const txt = await readFile(new URL('../server.js', import.meta.url), 'utf8');
   ok(!txt.includes("'BUILD'"), 'server.js نباید دوباره از فایل BUILD بخواند');
+});
+
+// ═══════════════════════════════════════════════════════════════
+// پنج شکستِ ساکت — هر پنج تا از یک جنس‌اند: کد به‌جای «نمی‌دانم»،
+// جوابِ معقولِ اشتباه می‌داد. هیچ‌کدام را ۲۴۰ تستِ قبلی نمی‌گرفت.
+// ═══════════════════════════════════════════════════════════════
+
+t('ارقام فارسی در تاریخ مناسبت خوانده می‌شوند', () => {
+  // پرامپت بازار خودش به مدل مثال «۱ فروردین» می‌دهد و می‌گوید «کد هر سه را
+  // می‌فهمد». `\d` در جاوااسکریپت فقط ارقام لاتین را می‌گیرد، پس «۲۲ بهمن»
+  // بی‌صدا به روز پیش‌فرضِ ماه می‌افتاد — ۱۷ روز خطا، بدون هیچ نشانه‌ای.
+  const today = new Date(2026, 0, 1);
+  const at = d => V.upcomingOccasions({ demandCalendar: [{ occasion: 'x', approxDate: d }] }, today)[0].daysUntil;
+  eq(at('۲۲ بهمن'), at('22 بهمن'), 'رقم فارسی و لاتین باید یک تاریخ بدهند');
+  eq(at('۱۵ اسفند'), at('15 اسفند'));
+  ok(at('۲۲ بهمن') !== at('بهمن'), 'روزِ صریح نباید همان ماهِ بی‌روز خوانده شود');
+});
+
+t('فشرده‌سازی حافظه، فرضیه را واقعیت نمی‌کند', () => {
+  // نقض قانون ۲ خودِ سند، از دست خودمان نه از دست مدل.
+  const stated = [];
+  for (let c = 1; c <= 10; c++)
+    for (let i = 0; i < 4; i++)
+      stated.push({ topic: `دور ${c} — ${i}`, value: `v${c}.${i}`,
+                    status: i === 0 ? 'hypothesis' : 'fact' });
+  const out = V.condenseMemory({ userStated: stated });
+  ok(out.condensed > 0, 'باید فشرده شود');
+  const summaries = out.knowledge.userStated.filter(x => /^خلاصه‌ی دورهای/.test(x.topic));
+  ok(summaries.length >= 2, 'هر وضعیت خلاصه‌ی خودش را دارد');
+  eq(summaries.filter(x => x.status === 'hypothesis').length, 1, 'فرضیه‌ها فرضیه می‌مانند');
+  ok(!summaries.some(x => x.status === 'fact' && /v\d+\.0\b/.test(x.value)),
+     'هیچ فرضیه‌ای نباید داخل خلاصه‌ی fact بنشیند');
+});
+
+t('شماره‌ی دور از داده می‌آید، نه از متنِ topic', () => {
+  // `mergeAnswers` در topic کلیدِ سؤال را می‌نویسد، نه «دور N» — پس قرارداد
+  // متنیِ قبلی در اجرای واقعی هرگز شلیک نمی‌کرد و حافظه بی‌نهایت باد می‌کرد.
+  let k = { userStated: [], learningMemory: { campaignHistory: [] } };
+  for (let round = 0; round < 10; round++) {
+    k.learningMemory = { campaignHistory: Array.from({ length: round }, () => ({})) };
+    const answers = {};
+    for (let i = 0; i < 4; i++) answers[`سؤال ${round}.${i}`] = `جواب ${round}.${i}`;
+    k = V.mergeAnswers(k, { answers });
+  }
+  ok(k.userStated.every(x => Number.isFinite(x.cycle)), 'هر گزاره شماره‌ی دور دارد');
+  const out = V.condenseMemory(k);
+  ok(out.condensed > 0, 'با ۴۰ گزاره از ۱۰ دور، فشرده‌سازی باید شلیک کند');
+});
+
+t('یک پستِ وایرال خط پایه را نمی‌نویسد', () => {
+  const posts = [
+    { id: 'a', date: '2026-08-20T00:00:00Z', likes: 5000 },
+    { id: 'b', date: '2026-08-15T00:00:00Z', likes: 40 },
+    { id: 'c', date: '2026-08-10T00:00:00Z', likes: 50 }
+  ];
+  eq(V.countedBaseline(posts).recent.likes, 50, 'میانه‌ی ۴۰/۵۰/۵۰۰۰ است، نه میانگینِ ۱۶۹۷');
+});
+
+t('«سه پست اخیر» بدون تاریخ، «اخیر» نامیده نمی‌شود', () => {
+  // نامِ میدان یکی نیست: `date` در یک منبع، `taken_at` در منبعی دیگر.
+  const byTakenAt = [
+    { id: 'a', taken_at: '2026-08-01T00:00:00Z', likes: 10 },
+    { id: 'b', taken_at: '2026-08-20T00:00:00Z', likes: 900 },
+    { id: 'c', taken_at: '2026-08-15T00:00:00Z', likes: 800 },
+    { id: 'd', taken_at: '2026-08-10T00:00:00Z', likes: 700 }
+  ];
+  const b = V.countedBaseline(byTakenAt);
+  eq(b.recent.likes, 800, 'taken_at هم تاریخ است');
+  eq(b.ordered, true);
+
+  const undated = [{ id: 'a', likes: 10 }, { id: 'b', likes: 900 }, { id: 'c', likes: 800 }];
+  const u = V.countedBaseline(undated);
+  eq(u.ordered, false, 'بدون تاریخ، ترتیب ادعا نمی‌شود');
+  ok(/«پنجره‌ی نمونه»/.test(u.rule), 'و قاعده خودش به مدل می‌گوید اسمش را «اخیر» نگذارد');
+});
+
+t('افت رسیدن با واکنشِ *صعودی* هم توضیح رقیب است', () => {
+  // قوی‌ترین حالتِ خودِ این تشخیص، تا امروز null برمی‌گرداند.
+  const tr = {
+    views:    { recent: 100, all: 400, ratio: 0.25, direction: 'down', diverged: true,  recentPosts: 3, allPosts: 12 },
+    comments: { recent: 40,  all: 10,  ratio: 4,    direction: 'up',   diverged: true,  recentPosts: 3, allPosts: 12 },
+    likes:    { recent: 90,  all: 30,  ratio: 3,    direction: 'up',   diverged: true,  recentPosts: 3, allPosts: 12 }
+  };
+  const c = V.reachConfound({ trend: tr });
+  ok(c, 'بازدید نصف و کامنت چهار برابر، آشکارترین نمونه‌ی همین پدیده است');
+  ok(/بالا رفته/.test(c.sentence), 'و نباید «ثابت مانده» بنویسد وقتی بالا رفته');
+  ok(/مسئله رساندن است/.test(c.sentence));
+
+  // ولی نوسانِ کوچکِ رو به پایین همچنان «ثابت» است، نه ابطال
+  const small = { views: tr.views,
+                  comments: { recent: 40, all: 41, ratio: 0.98, direction: 'down', diverged: false, recentPosts: 3, allPosts: 12 } };
+  ok(V.reachConfound({ trend: small }), '۴۱ به ۴۰ افتِ معنادار نیست');
 });
 
 // ═══ گزارش ═══

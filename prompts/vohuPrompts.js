@@ -943,7 +943,7 @@ A را درست می‌کنی B بدترین می‌شود، B را درست م�
    \`measurement.baselineTrend\` بنویس روند بالا رفته یا پایین آمده، مبنا را از چند
    پست آخر گرفتی و کل تاریخ چه عددی می‌گفت — مثل:
    «اخیراً روند بالا رفته؛ مبنا را از ۳ پست آخر گرفتم (۶۵ کامنت در هر پست)، نه از
-   میانگین ۱۲ پست (۱۶ کامنت).»
+   میانه‌ی ۱۲ پست (۱۶ کامنت).»
    بی این جمله، دو هفته بعد هر عددی بین آن دو، موفقیت به نظر می‌رسد.
 
 اگر خط پایه در شناخت نبود، نشانه‌ی مبهم ننویس. به‌جایش:
@@ -2068,13 +2068,21 @@ export const EVIDENCE_GATE_SCHEMA = {
  * باید بعد از هر مرحله‌ای که کاربر چیزی می‌گوید صدا زده شود،
  * و نتیجه‌اش به همه‌ی مراحل بعدی داده شود.
  */
-export function mergeAnswers(knowledge, { answers = {}, assumptionResponses = {}, constraints = [] } = {}) {
+export function mergeAnswers(knowledge, { answers = {}, assumptionResponses = {}, constraints = [], cycle } = {}) {
   const k = structuredClone(knowledge);
   k.userStated = k.userStated || [];
 
+  // شماره‌ی دور — تا `condenseMemory` بداند کدام گزاره قدیمی است.
+  // پیش‌فرض از خودِ حافظه در می‌آید (هر دور یک ردیف در تاریخچه‌ی کمپین)، پس
+  // هیچ صداکننده‌ای لازم نیست چیزی پاس بدهد؛ اگر کسی عدد دقیق‌تری دارد، بدهد.
+  const at = Number.isFinite(Number(cycle))
+    ? Number(cycle)
+    : (k.learningMemory?.campaignHistory?.length ?? 0) + 1;
+  const stamp = row => { k.userStated.push({ ...row, cycle: at }); };
+
   for (const [key, value] of Object.entries(answers)) {
     if (value == null || value === '') continue;
-    k.userStated.push({ topic: key, value: String(value), status: 'fact', source: 'کاربر مستقیماً گفت' });
+    stamp({ topic: key, value: String(value), status: 'fact', source: 'کاربر مستقیماً گفت' });
   }
 
   // حدسی که کاربر تأیید کرده fact می‌شود؛ حدسی که رد کرده حذف می‌شود، نه تعدیل
@@ -2082,15 +2090,30 @@ export function mergeAnswers(knowledge, { answers = {}, assumptionResponses = {}
   for (const [statement, response] of Object.entries(assumptionResponses)) {
     const yes = /^(درست|بله|آره|بلی|yes|true)/i.test(String(response).trim());
     if (yes) {
-      k.userStated.push({ topic: 'تأیید حدس', value: statement, status: 'fact', source: 'کاربر تأیید کرد' });
+      stamp({ topic: 'تأیید حدس', value: statement, status: 'fact', source: 'کاربر تأیید کرد' });
     } else {
       k.rejectedAssumptions.push(statement);
-      k.userStated.push({ topic: 'اصلاح کاربر', value: String(response), status: 'fact', source: 'کاربر اصلاح کرد' });
+      stamp({ topic: 'اصلاح کاربر', value: String(response), status: 'fact', source: 'کاربر اصلاح کرد' });
     }
   }
 
   if (constraints.length) k.constraints = [...(k.constraints || []), ...constraints];
   return k;
+}
+
+/**
+ * ارقام فارسی و عربی ← لاتین. **فقط برای خواندنِ عدد**، نه برای نمایش.
+ *
+ * `\d` در جاوااسکریپت فقط ۰ تا ۹ لاتین را می‌گیرد. تا امروز هر جای این فایل که
+ * عددی از متن بیرون کشیده می‌شد، متنِ فارسی را نمی‌دید و بی‌صدا به پیش‌فرض
+ * می‌افتاد — در محصولی که خروجی‌اش را به فارسی از مدل می‌خواهد.
+ *
+ * دو جا سوخته بود: تاریخ مناسبت («۲۲ بهمن» ۱۷ روز جابه‌جا می‌شد) و شمارهٔ دور
+ * در فشرده‌سازی حافظه. هر دو شکستِ ساکت بودند: عددی معقول برمی‌گشت، نه خطا.
+ */
+function toAsciiDigits(s) {
+  return String(s ?? '').replace(/[۰-۹٠-٩]/g,
+    d => String((d.codePointAt(0) - (d >= '۰' ? 0x06F0 : 0x0660))));
 }
 
 /**
@@ -2120,7 +2143,8 @@ export function upcomingOccasions(market, today = new Date()) {
 }
 
 function dayInMonth(s) {
-  const m = String(s).match(/(\d+)/);
+  // ارقام را اول لاتین کن — پرامپت خودش «۱ فروردین» را به مدل مثال می‌دهد
+  const m = toAsciiDigits(s).match(/(\d+)/);
   if (m) return Math.min(parseInt(m[1], 10), 28);
   if (/اواخر|late|end/i.test(s)) return 25;
   if (/اواسط|mid/i.test(s))      return 15;
@@ -2227,21 +2251,37 @@ export function countedBaseline(posts = [], { recent = 3, divergeRatio = 1.5, di
     p && (p.comments != null || p.likes != null || p.views != null));
   if (!withStats.length) return null;
 
-  // تازه‌ترین‌ها اول — «سه پست اخیر» یعنی سه پست اخیر، نه سه تای اول فهرست
-  const sorted = [...withStats].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  // تازه‌ترین‌ها اول — «سه پست اخیر» یعنی سه پست اخیر، نه سه تای اول فهرست.
+  //
+  // نامِ میدانِ تاریخ یکی نیست: منبعی `date` می‌دهد، منبعی `taken_at`. نسخه‌ی
+  // اول فقط `date` را می‌خواند و برای بقیه `String(undefined || '')` همه را
+  // برابر می‌کرد — مرتب‌سازی بی‌اثر می‌شد و «سه پست اخیر» می‌شد «سه تای اولِ
+  // فهرست». عدد برمی‌گشت، فقط از پست‌های اشتباه.
+  const dateOf = p => String(p?.date ?? p?.taken_at ?? p?.takenAt ?? p?.timestamp ?? '');
+  const dated  = withStats.filter(p => dateOf(p));
+  const sorted = [...withStats].sort((a, b) => dateOf(b).localeCompare(dateOf(a)));
 
   // ⚠️ به‌ازای هر پست، نه مجموع — و تقسیم بر پست‌هایی که *واقعاً این عدد را داشتند*.
   // Number(null) صفر است: بدون این فیلتر، پستی که آمارش را نداده بود مثل پستِ
   // صفر شمرده می‌شد و خط پایه را بی‌صدا پایین می‌کشید.
-  const avg = (list, k) => {
-    const ns = list.map(p => p?.[k]).filter(v => v != null && Number.isFinite(Number(v))).map(Number);
-    return ns.length ? { value: Math.round(ns.reduce((a, b) => a + b, 0) / ns.length), n: ns.length } : null;
+  // **میانه، نه میانگین.** یک پستِ وایرال بین سه پست، میانگین را از ۵۰ به ۱۶۹۷
+  // می‌برد و از آن به بعد هر عددی شکست به نظر می‌رسد. پنجره‌ی پیش‌فرض سه‌تایی
+  // است، یعنی حساس‌ترین حالت ممکن به همین یک نمونه‌ی پرت.
+  // میانه همان کاری را می‌کند که میانگین قرار بود بکند — «پستِ معمولیِ ما چقدر
+  // می‌گیرد» — بدون اینکه یک پست بتواند تنهایی جواب را بنویسد.
+  const mid = (list, k) => {
+    const ns = list.map(p => p?.[k]).filter(v => v != null && Number.isFinite(Number(v)))
+                   .map(Number).sort((a, b) => a - b);
+    if (!ns.length) return null;
+    const h = ns.length >> 1;
+    const value = ns.length % 2 ? ns[h] : (ns[h - 1] + ns[h]) / 2;
+    return { value: Math.round(value), n: ns.length };
   };
   const mk = list => {
-    const c = { comments: avg(list, 'comments'), likes: avg(list, 'likes'), views: avg(list, 'views') };
+    const c = { comments: mid(list, 'comments'), likes: mid(list, 'likes'), views: mid(list, 'views') };
     return { posts: list.length,
              comments: c.comments?.value ?? null, likes: c.likes?.value ?? null, views: c.views?.value ?? null,
-             // چند پست پشتِ هر عدد است — «میانگین ۱۲ پست» وقتی فقط ۳ تاشان عدد داشتند، دروغ است
+             // چند پست پشتِ هر عدد است — «میانه‌ی ۱۲ پست» وقتی فقط ۳ تاشان عدد داشتند، دروغ است
              n: { comments: c.comments?.n ?? 0, likes: c.likes?.n ?? 0, views: c.views?.n ?? 0 } };
   };
 
@@ -2265,14 +2305,23 @@ export function countedBaseline(posts = [], { recent = 3, divergeRatio = 1.5, di
     };
   }
 
+  // هیچ پستی تاریخ نداشت؟ پس ترتیب همان ترتیبِ ورودی است و «اخیر» ادعایی است
+  // که نمی‌توانیم بکنیم. عدد را می‌دهیم، ولی اسمش را عوض می‌کنیم — همان قاعده‌ی
+  // «حدس را حدس بنام»، این‌بار درباره‌ی خودِ ما.
+  const ordered = dated.length === withStats.length;
+
   return {
     recentN: Math.min(recent, sorted.length),
     recent:  recentBlock,
     all:     allBlock,
     trend,
+    ordered,
     // خودِ قاعده همراه عددها می‌رود، تا مدل مجبور نباشد حدس بزند کدام را برداریم
-    rule: 'مبنا از پنجره‌ی اخیر برداشته می‌شود، نه از کل تاریخ؛ و به‌ازای هر پست است، نه مجموع. '
-        + 'هر متریکی که در trend مقدار diverged=true دارد، باید همراه خط پایه صریح گفته شود.',
+    rule: 'عددها **میانه**‌اند، نه میانگین — یک پست وایرال نباید مبنا را بنویسد. '
+        + 'مبنا از پنجره‌ی اخیر برداشته می‌شود، نه از کل تاریخ؛ و به‌ازای هر پست است، نه مجموع. '
+        + 'هر متریکی که در trend مقدار diverged=true دارد، باید همراه خط پایه صریح گفته شود.'
+        + (ordered ? '' : ' ⚠️ پست‌ها تاریخ نداشتند: این پنجره «اخیر» نیست، فقط '
+            + 'چند تای اولِ فهرست است. آن را «پنجره‌ی نمونه» بنام، نه «اخیر».'),
     source:  'آمار عمومی پست‌های خوانده‌شده — شمرده شده، حدس نیست',
     countedAt: new Date().toISOString()
   };
@@ -2290,10 +2339,10 @@ function baselineTrendNote(tr, fa, { ours = true } = {}) {
   const span = `هر عددی بین ${Math.min(tr.recent, tr.all)} و ${Math.max(tr.recent, tr.all)} موفقیت به نظر می‌رسد`;
   return ours
     ? `اخیراً روند ${dir}؛ مبنا را از ${tr.recentPosts} پست آخر گرفتم `
-      + `(${tr.recent} ${fa} در هر پست)، نه از میانگین ${tr.allPosts} پست (${tr.all} ${fa}). `
+      + `(${tr.recent} ${fa} در هر پست)، نه از میانه‌ی ${tr.allPosts} پست (${tr.all} ${fa}). `
       + `بدون این، ${span}.`
     : `اخیراً روند ${dir}: ${tr.recentPosts} پست آخر ${tr.recent} ${fa} در هر پست، `
-      + `ولی میانگین ${tr.allPosts} پست ${tr.all} ${fa} است. خط پایه‌ی بالا باید از پنجره‌ی اخیر باشد، `
+      + `ولی میانه‌ی ${tr.allPosts} پست ${tr.all} ${fa} است. خط پایه‌ی بالا باید از پنجره‌ی اخیر باشد، `
       + `نه از کل تاریخ — وگرنه ${span}.`;
 }
 
@@ -2326,21 +2375,41 @@ export function reachConfound(baseline) {
   const rk = REACH_METRICS.find(k => tr[k]?.diverged && tr[k].direction === 'down');
   if (!rk) return null;
 
-  // و فقط وقتی واکنش تکان نخورده. اگر واکنش هم افتاده، دو عدد یک چیز می‌گویند.
-  const steady = REACTION_METRICS.filter(k => tr[k] && !tr[k].diverged);
+  // و فقط وقتی واکنش **نیفتاده**. اگر واکنش هم افتاده، دو عدد یک چیز می‌گویند
+  // و توضیح رقیبی در کار نیست.
+  //
+  // شرط قبلی `!diverged` بود، یعنی «واکنش تکان نخورده باشد» — و همین قوی‌ترین
+  // حالتِ خودِ این تشخیص را رد می‌کرد: وقتی رسیدن نصف شده و واکنش **بالا** رفته،
+  // محتوا به‌ازای هر بیننده آشکارا بهتر شده، ولی تابع `null` برمی‌گرداند و هیچ
+  // نمی‌گفت.
+  //
+  // شرطِ درست «رو به پایین نباشد» هم نیست: نوسانِ ۴۲ به ۴۰ از نظر جهت `down`
+  // است ولی معنایش «ثابت» است، و آن حالت از اول درست کار می‌کرد. آنچه توضیح
+  // رقیب را باطل می‌کند فقط افتِ **معنادار** واکنش است — چون آن‌وقت دو عدد یک
+  // چیز می‌گویند و چیزی برای تفکیک نمانده.
+  const steady = REACTION_METRICS.filter(
+    k => tr[k] && !(tr[k].diverged && tr[k].direction === 'down'));
   if (!steady.length) return null;
 
   const reach = tr[rk];
-  const said = steady.map(k => `${fa(k)} تقریباً ثابت مانده (${tr[k].recent} در برابر ${tr[k].all})`).join(' و ');
+  // «ثابت مانده» درباره‌ی عددی که بالا رفته دروغ است — و همین‌جا در جمله‌ای
+  // می‌نشست که قرار بود جلوی حکمِ اشتباه را بگیرد.
+  const word = k => tr[k].direction === 'up' ? 'بالا رفته' : 'تقریباً ثابت مانده';
+  const said = steady.map(k => `${fa(k)} ${word(k)} (${tr[k].recent} در برابر ${tr[k].all})`).join(' و ');
+  const rose = steady.some(k => tr[k].direction === 'up');
   return {
     reach:  { metric: rk, recent: reach.recent, all: reach.all, ratio: reach.ratio,
               recentPosts: reach.recentPosts, allPosts: reach.allPosts },
-    steady: steady.map(k => ({ metric: k, recent: tr[k].recent, all: tr[k].all })),
+    steady: steady.map(k => ({ metric: k, recent: tr[k].recent, all: tr[k].all,
+                               direction: tr[k].direction })),
     sentence:
       `${fa(rk)} هر پست افت کرده (${reach.recent} در برابر ${reach.all} در کل تاریخ) در حالی که ${said}. `
       + `پس اگر این کارت جواب نداد، «محتوا بد بود» تنها توضیح نیست — افت رسیدن یک توضیح رقیب است `
       + `و همین حالا هم در جریان است. قبل از هر حکمی درباره‌ی محتوا، اول ${fa(rk)} هر پست را نگاه کن: `
-      + `اگر ${fa(rk)} باز هم افتاده و واکنش ثابت مانده، محتوا به‌ازای هر بیننده بهتر شده، نه بدتر.`
+      + (rose
+          ? `${fa(rk)} افتاده ولی واکنش بالا رفته — یعنی محتوا به‌ازای هر بیننده آشکارا بهتر شده. `
+            + `مسئله رساندن است، نه ساختن.`
+          : `اگر ${fa(rk)} باز هم افتاده و واکنش ثابت مانده، محتوا به‌ازای هر بیننده بهتر شده، نه بدتر.`)
   };
 }
 
@@ -2435,6 +2504,18 @@ export function threadFatigue(campaignHistory = [], target) {
  *   ۱. گزاره‌هایی که کاربر مستقیماً گفته و هنوز درباره‌ی وضع فعلی‌اند
  *   ۲. محدودیت‌ها
  *   ۳. فرضیه‌های زنده (نه بازنشسته، نه ارتقایافته)
+ *
+ * **و وضعیت هرگز عوض نمی‌شود.** نسخه‌ی اول همه‌ی گزاره‌های قدیمی را در یک
+ * خلاصه با `status: 'fact'` می‌ریخت. یعنی هر فرضیه‌ای که به پنجره‌ی قدیمی
+ * می‌افتاد، بعد از فشرده‌سازی «واقعیت» می‌شد — نقض مستقیم قانون ۲ همین سند
+ * («چیزی را که حدس زده‌ای، حدس بنام») از دست خودمان، نه از دست مدل.
+ * حالا هر وضعیت خلاصه‌ی خودش را دارد و هیچ گزاره‌ای از نردبان بالا نمی‌رود.
+ *
+ * **شماره‌ی دور از داده می‌آید، نه از متن.** نسخه‌ی اول شماره را از عبارت
+ * «دور N» داخل `topic` در می‌آورد — ولی `mergeAnswers` در `topic` کلیدِ سؤال را
+ * می‌نویسد، نه «دور N». یعنی در اجرای واقعی هیچ‌وقت چیزی فشرده نمی‌شد و تورم
+ * حافظه دست‌نخورده می‌ماند. تست‌ها این را نمی‌دیدند چون خودشان `topic` را
+ * دقیقاً به همان شکلی می‌ساختند که تابع می‌خواست.
  */
 export function condenseMemory(knowledge, { keepRecentCycles = 3, threshold = 30 } = {}) {
   const k = structuredClone(knowledge);
@@ -2442,7 +2523,10 @@ export function condenseMemory(knowledge, { keepRecentCycles = 3, threshold = 30
   if (stated.length <= threshold) return { knowledge: k, condensed: 0 };
 
   const cycleOf = s => {
-    const m = String(s.topic || '').match(/دور\s*(\d+)/);
+    // میدانِ صریح اول — این چیزی است که `mergeAnswers` مهر می‌زند
+    if (Number.isFinite(Number(s?.cycle))) return Number(s.cycle);
+    // و بعد قرارداد متنیِ قدیمی، این‌بار با ارقام فارسی هم
+    const m = toAsciiDigits(s?.topic).match(/دور\s*(\d+)/);
     return m ? parseInt(m[1], 10) : null;
   };
   const cycles = stated.map(cycleOf).filter(Number.isFinite);
@@ -2454,14 +2538,34 @@ export function condenseMemory(knowledge, { keepRecentCycles = 3, threshold = 30
 
   if (old.length < 3) return { knowledge: k, condensed: 0 };
 
-  const cs = old.map(cycleOf).filter(Number.isFinite);
-  k.userStated = [
-    ...keep,
-    { topic: `خلاصه‌ی دورهای ${Math.min(...cs)} تا ${Math.max(...cs)}`,
-      value: old.map(o => o.value).join(' · ').slice(0, 600),
-      status: 'fact', source: 'فشرده‌شده از گزارش‌های کاربر' }
-  ];
-  return { knowledge: k, condensed: old.length, replacedWith: 1 };
+  // یک خلاصه به‌ازای هر وضعیت. گزاره‌ای که تنهاست خلاصه نمی‌شود —
+  // «خلاصه‌ی یک چیز» همان یک چیز است با یک منبعِ گمراه‌کننده‌ی تازه.
+  const byStatus = new Map();
+  for (const s of old) {
+    const key = s?.status ?? null;
+    if (!byStatus.has(key)) byStatus.set(key, []);
+    byStatus.get(key).push(s);
+  }
+
+  const summaries = [];
+  let condensed = 0;
+  for (const [status, group] of byStatus) {
+    if (group.length < 2) { summaries.push(...group); continue; }
+    const cs = group.map(cycleOf).filter(Number.isFinite);
+    const summary = {
+      topic: `خلاصه‌ی دورهای ${Math.min(...cs)} تا ${Math.max(...cs)}`,
+      value: group.map(o => o.value).join(' · ').slice(0, 600),
+      source: 'فشرده‌شده از گزارش‌های کاربر'
+    };
+    // وضعیتِ نامشخص، نامشخص می‌ماند. اختراعِ `fact` همان خطای قبلی است.
+    if (status !== null) summary.status = status;
+    summaries.push(summary);
+    condensed += group.length;
+  }
+
+  if (!condensed) return { knowledge: k, condensed: 0 };
+  k.userStated = [...keep, ...summaries];
+  return { knowledge: k, condensed, replacedWith: summaries.length };
 }
 
 /**
@@ -2761,7 +2865,7 @@ export const GATES = {
     const posts = (fromRecent ? baseline.recent : baseline.all).n?.[hit.key]
                ?? (fromRecent ? baseline.recentN : baseline.all.posts);
     const scope = fromRecent ? `${posts} پست اخیر` : `${posts} پست خوانده‌شده`;
-    m.baseline = `میانگین ${n} ${hit.fa} در هر پست (${scope})`;
+    m.baseline = `میانه‌ی ${n} ${hit.fa} در هر پست (${scope})`;
     m.baselineOrigin = 'counted_by_code';
     // وقتی مجبور شدیم به کل تاریخ برگردیم، همان‌جا گفته شود — نه اینکه سکوت شود
     if (!fromRecent && !m.baselineTrend)
